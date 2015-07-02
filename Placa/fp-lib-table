@@ -1,0 +1,8 @@
+(fp_lib_table
+  (lib (name ArduProMiniTKB)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/ArduProMiniTKB.mod")(options "")(descr ""))
+  (lib (name ArduProMiniTKB2)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/ArduProMiniTKB.mod")(options "")(descr ""))
+  (lib (name tcrt1000-vert)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/tcrt1000-vert.mod")(options "")(descr ""))
+  (lib (name tcrt1000-vert2)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/tcrt1000-vert.mod")(options "")(descr ""))
+  (lib (name tcrt1000)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/tcrt1000.mod")(options "")(descr ""))
+  (lib (name tcrt10002)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/tcrt1000.mod")(options "")(descr ""))
+)
