@@ -180,16 +180,17 @@ void loop() {
       // linea = (0 * s0 + 1000 * s1 + 2000 * s2 + 3000 * s3 + 4000 * s4) / (s0 + s1 + s2 + s3 + s4)
       // 0 a 4000, donde 2000 es el centroDeLinea
       sensoresLinea = (
-        (int32_t)sensores[cenIzq] * 1000 + 
-        (int32_t)sensores[cen]    * 2000 + 
-        (int32_t)sensores[cenDer] * 3000 + 
-        (int32_t)sensores[der]    * 4000
+        sensores[izq]    * 0 + 
+        sensores[cenIzq] * 1000 + 
+        sensores[cen]    * 2000 + 
+        sensores[cenDer] * 3000 + 
+        sensores[der]    * 4000
       ) / (
-        (int32_t)sensores[izq]    + 
-        (int32_t)sensores[cenIzq] + 
-        (int32_t)sensores[cen]    + 
-        (int32_t)sensores[cenDer] + 
-        (int32_t)sensores[der]
+        sensores[izq]    + 
+        sensores[cenIzq] + 
+        sensores[cen]    + 
+        sensores[cenDer] + 
+        sensores[der]
       );
   
       errP = sensoresLinea - centroDeLinea;
