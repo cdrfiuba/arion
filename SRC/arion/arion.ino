@@ -31,8 +31,8 @@ const int tolerancia = 5; // Margen de ruido al medir negro.
 const int toleranciaBorde = 50; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
-const int velocidadMinima = 0;
-const int rangoVelocidad = 255;
+const int velocidadMinima = 10;
+const int rangoVelocidad = 80;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -53,11 +53,12 @@ int ultimoBorde;
 
 // tiempo entre ciclos de PID.
 // no debe ser 0, pues se usa para dividir
-long tiempo = 1;
+long tiempoUs = 1;
 
 void setup() {                
   // como los motores se manejan con AnalogWrite, 
   // no hace falta ponerlos como salida
+  // [Yo lo haria, simplemente para documentar y hacer codigo mas explicity. Explicit better than implicit - Lucas ]
   // pinMode(pwmMotorD, OUTPUT);
   // pinMode(pwmMotorI, OUTPUT);
 
@@ -82,6 +83,8 @@ void setup() {
   pinMode(boton2, INPUT);
   pinMode(boton3, INPUT);
 
+  Serial.begin(9600);
+
   for (int i = 0; i < cantidadDeSensores; i++) {
     sensores[i] = 0;
   }
@@ -94,7 +97,7 @@ void setup() {
   errPAnterior = 0;
   ultimoBorde = izquierda;
   estadoActualAdentro = true;
-  tiempo = 1;
+  tiempoUs = 1;
   
 }
 
@@ -116,13 +119,29 @@ inline void obtenerSensores() {
   sensores[der]    = analogRead(sensor4);
 }
 
-void mostrarSensor(int sensor) {
+void mostrarSensorLEDs(int sensor) {
   if ((sensor >= cantidadDeSensores) || (sensor < 0)) {
     return; 
   }
-  digitalWrite(led1, ((sensores[sensor] / 256) ? HIGH : LOW));
-  digitalWrite(led2, ((sensores[sensor] / 64) ? HIGH : LOW));
-  digitalWrite(led3, ((sensores[sensor] / 16) ? HIGH : LOW));
+  digitalWrite(led1, ((sensores[sensor] / 1024) ? HIGH : LOW));
+  digitalWrite(led2, ((sensores[sensor] /  512) ? HIGH : LOW));
+  digitalWrite(led3, ((sensores[sensor] /  256) ? HIGH : LOW));
+}
+
+void mostrarSensores() {
+  char buffer[50];
+  // printf(buffer, "%.4d %.4d %.4d %.4d %.4d", sensores[izq], sensores[cenIzq], sensores[cen], sensores[cenDer], sensores[der]);
+  // Serial.println(buffer);
+  Serial.print(sensores[izq]);
+  Serial.print(" ");
+  Serial.print(sensores[cenIzq]);
+  Serial.print(" ");
+  Serial.print(sensores[cen]);
+  Serial.print(" ");
+  Serial.print(sensores[cenDer]);
+  Serial.print(" ");
+  Serial.print(sensores[der]);
+  Serial.println("");
 }
 
 void apagarMotores() {
@@ -131,12 +150,30 @@ void apagarMotores() {
 }
 
 void loop() {
+/*
+while(1) {
+
+  digitalWrite(led1, HIGH);
+  digitalWrite(led2, HIGH);
+  digitalWrite(led3, HIGH);
+  
+  while (!apretado(boton2)); 
+  esperarReboteBoton();
+
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
+  digitalWrite(led3, LOW);
+  while (apretado(boton2));
+
+}
+*/
 
   // hasta que se presione el botón, espera,
   // y muestra en los leds el valor del sensor central
-  while (!apretado(boton2)) {
+  while (!apretado(boton1)) {
     obtenerSensores();
-    mostrarSensor(cen);
+    mostrarSensorLEDs(cen);
+    mostrarSensores();
   }
   esperarReboteBoton();
 
@@ -144,7 +181,7 @@ void loop() {
   setup();
 
   // hasta que se suelte el botón, espera 
-  while (apretado(boton2));
+  while (apretado(boton1));
   esperarReboteBoton();
 
   // arranque progresivo, de 0 a 250 en 75 ms
@@ -155,7 +192,7 @@ void loop() {
   }
 
   // ejecuta el ciclo principal hasta que se presione el botón
-  while (!apretado(boton2)) {
+  while (!apretado(boton1)) {
     obtenerSensores();
     
     if (sensores[izq] > toleranciaBorde) {
@@ -194,8 +231,8 @@ void loop() {
       );
   
       errP = sensoresLinea - centroDeLinea;
-      errI = errP * tiempo;
-      errD = (errP - errPAnterior) / tiempo;
+      errI = errP * tiempoUs;
+      errD = (errP - errPAnterior) / tiempoUs;
       // err_i += (err_p >> 8);
       //if ( (err_i >= VALOR_MAX_INT16 - VALOR_MAX_ERR_P) || (err_i <= -(VALOR_MAX_INT16 - VALOR_MAX_ERR_P)) ) {
       //    err_i -= (err_p >> 8);
@@ -226,7 +263,7 @@ void loop() {
         analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad - reduccionVelocidad);
       }
       
-      tiempo = micros() - tiempo;
+      tiempoUs = micros() - tiempoUs;
       
     } else {
       // modo me fui
@@ -246,7 +283,7 @@ void loop() {
   apagarMotores();
 
   // hasta que se suelte el botón, espera
-  while (apretado(boton2));
+  while (apretado(boton1));
   esperarReboteBoton();
 
 }
