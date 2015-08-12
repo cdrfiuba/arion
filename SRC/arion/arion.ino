@@ -1,3 +1,15 @@
+// nada marron nada blanco rojo nada
+//              micro
+
+// nada nada blanco rojo marron
+//            usb
+
+char debug_string_buffer[50];
+#define debug(formato, valor) \
+  sprintf(debug_string_buffer, formato, valor); \
+  Serial.print(debug_string_buffer); \
+  delay(1);
+
 // definición de pines del micro.
 const int pwmMotorD = 11;
 const int pwmMotorI = 10;
@@ -7,9 +19,9 @@ const int ledArduino = 13;
 const int led1 = 9;
 const int led2 = 8;
 const int led3 = 12;
-const int boton1 = 4;
+const int boton1 = 7;
 const int boton2 = 6;
-const int boton3 = 7;
+const int boton3 = 4;
 const int sensor0 = A0;
 const int sensor1 = A1;
 const int sensor2 = A2;
@@ -31,8 +43,8 @@ const int tolerancia = 5; // Margen de ruido al medir negro.
 const int toleranciaBorde = 50; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
-const int velocidadMinima = 10;
-const int rangoVelocidad = 80;
+const int velocidadMinima = 0;
+const int rangoVelocidad = 20;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -112,11 +124,11 @@ void esperarReboteBoton() {
 inline void obtenerSensores() {
   // carga en el array de sensores las lecturas AD de cada sensor
   // este proceso lleva 500 us
-  sensores[izq]    = analogRead(sensor0);
-  sensores[cenIzq] = analogRead(sensor1);
-  sensores[cen]    = analogRead(sensor2);
-  sensores[cenDer] = analogRead(sensor3);
-  sensores[der]    = analogRead(sensor4);
+  sensores[izq]    = 1024 - analogRead(sensor0);
+  sensores[cenIzq] = 1024 - analogRead(sensor1);
+  sensores[cen]    = 1024 - analogRead(sensor2);
+  sensores[cenDer] = 1024 - analogRead(sensor3);
+  sensores[der]    = 1024 - analogRead(sensor4);
 }
 
 void mostrarSensorLEDs(int sensor) {
@@ -129,9 +141,15 @@ void mostrarSensorLEDs(int sensor) {
 }
 
 void mostrarSensores() {
-  char buffer[50];
+  //char buffer[50];
   // printf(buffer, "%.4d %.4d %.4d %.4d %.4d", sensores[izq], sensores[cenIzq], sensores[cen], sensores[cenDer], sensores[der]);
   // Serial.println(buffer);
+  debug("%.4d ", sensores[izq]);
+  debug("%.4d ", sensores[cenIzq]);
+  debug("%.4d ", sensores[cen]);
+  debug("%.4d ", sensores[cenDer]);
+  debug("%.4d\n", sensores[der]);
+  /*
   Serial.print(sensores[izq]);
   Serial.print(" ");
   Serial.print(sensores[cenIzq]);
@@ -142,6 +160,7 @@ void mostrarSensores() {
   Serial.print(" ");
   Serial.print(sensores[der]);
   Serial.println("");
+  */
 }
 
 void apagarMotores() {
@@ -150,6 +169,7 @@ void apagarMotores() {
 }
 
 void loop() {
+
 /*
 while(1) {
 
@@ -166,8 +186,8 @@ while(1) {
   while (apretado(boton2));
 
 }
-*/
 
+*/
   // hasta que se presione el botón, espera,
   // y muestra en los leds el valor del sensor central
   while (!apretado(boton1)) {
@@ -176,7 +196,10 @@ while(1) {
     mostrarSensores();
   }
   esperarReboteBoton();
-
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
+  digitalWrite(led3, LOW);
+  
   // inicialización de todo
   setup();
 
@@ -217,17 +240,17 @@ while(1) {
       // linea = (0 * s0 + 1000 * s1 + 2000 * s2 + 3000 * s3 + 4000 * s4) / (s0 + s1 + s2 + s3 + s4)
       // 0 a 4000, donde 2000 es el centroDeLinea
       sensoresLinea = (
-        sensores[izq]    * 0 + 
-        sensores[cenIzq] * 1000 + 
-        sensores[cen]    * 2000 + 
-        sensores[cenDer] * 3000 + 
-        sensores[der]    * 4000
+        (long)sensores[izq]    * 0 + 
+        (long)sensores[cenIzq] * 1000 + 
+        (long)sensores[cen]    * 2000 + 
+        (long)sensores[cenDer] * 3000 + 
+        (long)sensores[der]    * 4000
       ) / (
-        sensores[izq]    + 
-        sensores[cenIzq] + 
-        sensores[cen]    + 
-        sensores[cenDer] + 
-        sensores[der]
+        (long)sensores[izq]    + 
+        (long)sensores[cenIzq] + 
+        (long)sensores[cen]    + 
+        (long)sensores[cenDer] + 
+        (long)sensores[der]
       );
   
       errP = sensoresLinea - centroDeLinea;
@@ -239,11 +262,8 @@ while(1) {
       //}
       errPAnterior = errP;
 
-      reduccionVelocidad = errP * ( 1 / coeficienteErrorP) + errI * (1 / coeficienteErrorI) + errD * (1 / coeficienteErrorD);
+      reduccionVelocidad = errP / coeficienteErrorP;// + errI * (1 / coeficienteErrorI) + errD * (1 / coeficienteErrorD);
       
-      // printf de valores PID
-      //printf("p:%5i i:%5i d:%5i rv:%5i\n", err_p, err_i, err_d, reduccion_velocidad);
-  
       // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166 
       // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
       // // err_i toma valores entre -32k y 32k, por lo que su aporte a diff_potencia esta acotado entre -32 y +32 (-32 y +32 para 6 sensores)
@@ -251,8 +271,20 @@ while(1) {
       // // Para un caso normal, en que err_p varie 30 entre una medicion y la siguiente, estará acotado entre -45 y +45
       
       // constrain si o no?
-      reduccionVelocidad = constrain(reduccionVelocidad, -rangoVelocidad, rangoVelocidad);
+      if (reduccionVelocidad < -rangoVelocidad) {
+        reduccionVelocidad = -rangoVelocidad;
+      } else if (reduccionVelocidad > rangoVelocidad) {
+        reduccionVelocidad = rangoVelocidad;
+      }
+      //reduccionVelocidad = constrain(reduccionVelocidad, -rangoVelocidad, rangoVelocidad);
       
+      // printf de valores PID
+      //printf("p:%5i i:%5i d:%5i rv:%5i\n", err_p, err_i, err_d, reduccion_velocidad);
+      debug("%.5i ", centroDeLinea);
+      debug("%.5i ", sensoresLinea);
+      debug("%.5i ", errP);
+      debug("%.5i\n", reduccionVelocidad);
+
       if (reduccionVelocidad < 0) {
         // a la derecha de la linea
         analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad - reduccionVelocidad);
