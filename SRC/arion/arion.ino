@@ -56,7 +56,7 @@ const int tolerancia = 0; // Margen de ruido al medir negro.
 const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
-const int velocidadMinima = 0;
+const int velocidadMinima = 5;
 const int rangoVelocidad = 40;
 int reduccionVelocidad;
 int errP;
@@ -67,7 +67,7 @@ int errD;
 int sensoresLinea = 0;
 const int centroDeLinea = 3000;
 const int coeficienteErrorP = 18;
-const int coeficienteErrorI = 3000;
+const int coeficienteErrorI = 2400;
 const int coeficienteErrorDmult = 20;
 const int coeficienteErrorDdiv = 10;
 
