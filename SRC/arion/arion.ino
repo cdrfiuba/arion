@@ -52,12 +52,12 @@ const int cenDer = 3;
 const int der    = 4;
 
 
-const int tolerancia = 120; // Margen de ruido al medir negro.
+const int tolerancia = 0; // Margen de ruido al medir negro.
 const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 const int velocidadMinima = 0;
-const int rangoVelocidad = 30;
+const int rangoVelocidad = 35;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -66,9 +66,9 @@ int errD;
 
 int sensoresLinea = 0;
 const int centroDeLinea = 2000;
-const int coeficienteErrorP = 12;
-const int coeficienteErrorI = 6000;
-const int coeficienteErrorD = 6;
+const int coeficienteErrorP = 18;
+const int coeficienteErrorI = 3000;
+const int coeficienteErrorD = 1;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
 // bordes para modo "me fui"
@@ -347,7 +347,7 @@ void loop() {
       //}
       errPAnterior = errP;
       //delayMicroseconds (2000);
-      reduccionVelocidad = errP / coeficienteErrorP  + errD / coeficienteErrorD ;//+ errI * (1 / coeficienteErrorI);
+      reduccionVelocidad = errP / coeficienteErrorP  + errD / coeficienteErrorD + errI / coeficienteErrorI;
       
       // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166 
       // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
