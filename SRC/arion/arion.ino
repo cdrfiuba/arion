@@ -1,6 +1,7 @@
 // nada marron nada blanco rojo nada
 //              micro
 
+
 // nada nada blanco rojo marron
 //            usb
 
@@ -55,8 +56,8 @@ const int tolerancia = 120; // Margen de ruido al medir negro.
 const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
-const int velocidadMinima = 5;
-const int rangoVelocidad = 40;
+const int velocidadMinima = 0;
+const int rangoVelocidad = 30;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -65,9 +66,9 @@ int errD;
 
 int sensoresLinea = 0;
 const int centroDeLinea = 2000;
-const int coeficienteErrorP = 20;
+const int coeficienteErrorP = 12;
 const int coeficienteErrorI = 6000;
-const int coeficienteErrorD = 3;
+const int coeficienteErrorD = 6;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
 // bordes para modo "me fui"
@@ -108,7 +109,7 @@ void setup() {
   pinMode(boton2, INPUT);
   pinMode(boton3, INPUT);
 
-  Serial.begin(9600);
+//  Serial.begin(9600);
 
   for (int i = 0; i < cantidadDeSensores; i++) {
     sensores[i] = 0;
@@ -345,8 +346,8 @@ void loop() {
       //    err_i -= (err_p >> 8);
       //}
       errPAnterior = errP;
-
-      reduccionVelocidad = errP / coeficienteErrorP;// + errI * (1 / coeficienteErrorI) + errD * (1 / coeficienteErrorD);
+      //delayMicroseconds (2000);
+      reduccionVelocidad = errP / coeficienteErrorP  + errD / coeficienteErrorD ;//+ errI * (1 / coeficienteErrorI);
       
       // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166 
       // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
