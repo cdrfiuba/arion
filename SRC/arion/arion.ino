@@ -9,6 +9,8 @@ char debug_string_buffer[50];
   sprintf(debug_string_buffer, formato, valor); \
   Serial.print(debug_string_buffer); \
   delay(1);
+  
+const bool DEBUG = false;
 
 // definición de pines del micro.
 const int pwmMotorD = 11;
@@ -37,6 +39,9 @@ const int MINIMO_VALOR_BATERIA = 771;
 
 const int cantidadDeSensores = 5;
 int sensores[cantidadDeSensores];
+ // guarda los valores mínimos y máximos de calibración
+int minimosSensores[cantidadDeSensores];
+int maximosSensores[cantidadDeSensores];
 
 // indices de array sensores
 const int izq    = 0;
@@ -45,8 +50,9 @@ const int cen    = 2;
 const int cenDer = 3;
 const int der    = 4;
 
-const int tolerancia = 5; // Margen de ruido al medir negro.
-const int toleranciaBorde = 50; // Mínimo para decidir cuál fue el último borde
+
+const int tolerancia = 120; // Margen de ruido al medir negro.
+const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 const int velocidadMinima = 5;
@@ -59,24 +65,25 @@ int errD;
 
 int sensoresLinea = 0;
 const int centroDeLinea = 2000;
-const int coeficienteErrorP = 9;
+const int coeficienteErrorP = 20;
 const int coeficienteErrorI = 6000;
 const int coeficienteErrorD = 3;
 
-boolean estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
+bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
 // bordes para modo "me fui"
 const int derecha = 1;
 const int izquierda = 0;
 int ultimoBorde;
 
-// tiempo entre ciclos de PID.
+// para calcular tiempo entre ciclos de PID.
 // no debe ser 0, pues se usa para dividir
-long tiempoUs = 1;
+long int ultimoTiempoUs = 0; // guarda el valor de micros()
+int tiempoUs = 0; // guarda el tiempo del ciclo
+const int tiempoCicloReferencia = 840;
 
 void setup() {                
   // como los motores se manejan con AnalogWrite, 
   // no hace falta ponerlos como salida
-  // [Yo lo haria, simplemente para documentar y hacer codigo mas explicity. Explicit better than implicit - Lucas ]
   // pinMode(pwmMotorD, OUTPUT);
   // pinMode(pwmMotorI, OUTPUT);
 
@@ -105,6 +112,8 @@ void setup() {
 
   for (int i = 0; i < cantidadDeSensores; i++) {
     sensores[i] = 0;
+    minimosSensores[i] = 0;
+    maximosSensores[i] = 1023;
   }
   
   apagarMotores();
@@ -115,11 +124,12 @@ void setup() {
   errPAnterior = 0;
   ultimoBorde = izquierda;
   estadoActualAdentro = true;
-  tiempoUs = 1;
+  tiempoUs = 1.0;
+  ultimoTiempoUs = 0;
   
 }
 
-boolean apretado(int boton) {
+bool apretado(int boton) {
   return (digitalRead(boton) == LOW);
 }
 
@@ -137,6 +147,41 @@ inline void obtenerSensores() {
   sensores[der]    = 1024 - analogRead(sensor4);
 }
 
+inline void obtenerSensoresCalibrados() {
+  int denominador = 0;
+  signed int valor = 0;
+  obtenerSensores();
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    denominador = maximosSensores[i] - minimosSensores[i];
+    valor = ((signed long)sensores[i] - minimosSensores[i]) * 1023 / denominador;
+    if (valor > 1023) {
+      valor = 1023;
+    } else if (valor < 0) {
+      valor = 0;
+    }
+    sensores[i] = valor;
+  }
+}
+
+void calibrarSensores() {
+  // reseteo la calibración
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    minimosSensores[i] = 1023;
+    maximosSensores[i] = 0;
+  }
+  
+  // leo los sensores, y guardo los mínimos y los máximos
+  obtenerSensores();
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    if (sensores[i] < minimosSensores[i]) {
+      minimosSensores[i] = sensores[i];
+    }
+    if (sensores[i] > minimosSensores[i]) {
+      maximosSensores[i] = sensores[i];
+    }
+  }
+}
+
 void mostrarSensorLEDs(int sensor) {
   if ((sensor >= cantidadDeSensores) || (sensor < 0)) {
     return; 
@@ -147,27 +192,12 @@ void mostrarSensorLEDs(int sensor) {
 }
 
 void mostrarSensores() {
-  //char buffer[50];
-  // printf(buffer, "%.4d %.4d %.4d %.4d %.4d", sensores[izq], sensores[cenIzq], sensores[cen], sensores[cenDer], sensores[der]);
-  // Serial.println(buffer);
   debug("%.4d ", analogRead(batteryControl));
   debug("%.4d ", sensores[izq]);
   debug("%.4d ", sensores[cenIzq]);
   debug("%.4d ", sensores[cen]);
   debug("%.4d ", sensores[cenDer]);
   debug("%.4d\n", sensores[der]);
-  /*
-  Serial.print(sensores[izq]);
-  Serial.print(" ");
-  Serial.print(sensores[cenIzq]);
-  Serial.print(" ");
-  Serial.print(sensores[cen]);
-  Serial.print(" ");
-  Serial.print(sensores[cenDer]);
-  Serial.print(" ");
-  Serial.print(sensores[der]);
-  Serial.println("");
-  */
 }
 
 void apagarMotores() {
@@ -214,39 +244,48 @@ void loop() {
   }
 */
 /*
-while(1) {
+  while(1) {
 
-  digitalWrite(led1, HIGH);
-  digitalWrite(led2, HIGH);
-  digitalWrite(led3, HIGH);
-  
-  while (!apretado(boton2)); 
-  esperarReboteBoton();
+    digitalWrite(led1, HIGH);
+    digitalWrite(led2, HIGH);
+    digitalWrite(led3, HIGH);
+    
+    while (!apretado(boton2)); 
+    esperarReboteBoton();
 
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
-  digitalWrite(led3, LOW);
-  while (apretado(boton2));
+    digitalWrite(led1, LOW);
+    digitalWrite(led2, LOW);
+    digitalWrite(led3, LOW);
+    while (apretado(boton2));
 
-}
+  }
 
 */
+  // inicialización de todo
+  setup();
+
   // hasta que se presione el botón, espera,
   // y muestra en los leds el valor del sensor central
   while (!apretado(boton1)) {
-    obtenerSensores();
+    obtenerSensoresCalibrados();
     mostrarSensorLEDs(cen);
     mostrarSensores();
     chequearBateriaBloqueante();
+    
+    while (apretado(boton3)) {
+      digitalWrite(led1, HIGH);
+      calibrarSensores();
+      digitalWrite(led1, LOW);
+      digitalWrite(led2, LOW);
+      digitalWrite(led3, LOW);
+      delay(50);
+    }
   }
   esperarReboteBoton();
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
   digitalWrite(led3, LOW);
   
-  // inicialización de todo
-  setup();
-
   // hasta que se suelte el botón, espera 
   while (apretado(boton1));
   esperarReboteBoton();
@@ -261,7 +300,7 @@ while(1) {
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
     chequearBateria();
-    obtenerSensores();
+    obtenerSensoresCalibrados();
     
     if (sensores[izq] > toleranciaBorde) {
       ultimoBorde = izquierda;
@@ -299,8 +338,8 @@ while(1) {
       );
   
       errP = sensoresLinea - centroDeLinea;
-      errI = errP * tiempoUs;
-      errD = (errP - errPAnterior) / tiempoUs;
+      errI = errP * tiempoCicloReferencia / tiempoUs;
+      errD = (errP - errPAnterior) * tiempoUs / tiempoCicloReferencia;
       // err_i += (err_p >> 8);
       //if ( (err_i >= VALOR_MAX_INT16 - VALOR_MAX_ERR_P) || (err_i <= -(VALOR_MAX_INT16 - VALOR_MAX_ERR_P)) ) {
       //    err_i -= (err_p >> 8);
@@ -315,32 +354,33 @@ while(1) {
       // // err_d toma valores entre -5k y 5k, por lo que su aporte a diff_potencia esta acotado entre -inf y +inf (para los niveles de representacion que manejamos). 
       // // Para un caso normal, en que err_p varie 30 entre una medicion y la siguiente, estará acotado entre -45 y +45
       
-      // constrain si o no?
+      // constrain
       if (reduccionVelocidad < -rangoVelocidad) {
         reduccionVelocidad = -rangoVelocidad;
       } else if (reduccionVelocidad > rangoVelocidad) {
         reduccionVelocidad = rangoVelocidad;
       }
-      //reduccionVelocidad = constrain(reduccionVelocidad, -rangoVelocidad, rangoVelocidad);
-      
-      // printf de valores PID
-      //printf("p:%5i i:%5i d:%5i rv:%5i\n", err_p, err_i, err_d, reduccion_velocidad);
-      debug("% .5i ", centroDeLinea);
-      debug("% .5i ", sensoresLinea);
-      debug("% .5i ", errP);
-      debug("% .5i\n", reduccionVelocidad);
 
       if (reduccionVelocidad < 0) {
-        // a la derecha de la linea
-        //analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad + reduccionVelocidad);
-        //analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad);
+        // me muevo hacia la izquierda
+        analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad + reduccionVelocidad);
+        analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad);
       } else {
-        // a la izquierda de la linea
-        //analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
-        //analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad - reduccionVelocidad);
+        // me muevo hacia la derecha
+        analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
+        analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad - reduccionVelocidad);
       }
       
-      tiempoUs = micros() - tiempoUs;
+      // tiempoUs = (double)micros() / 1000.0 - tiempoUs;
+      if (DEBUG) {
+        tiempoUs = micros() - ultimoTiempoUs;
+        debug("%.4i ", tiempoUs);
+        debug("% .4i ", sensoresLinea);
+        debug("% .4i ", errP);
+        debug("% .3i\n", reduccionVelocidad);
+      }
+      tiempoUs = micros() - ultimoTiempoUs;
+      ultimoTiempoUs = micros();
       
     } else {
       // modo me fui
@@ -354,6 +394,9 @@ while(1) {
     }
   }
   esperarReboteBoton();
+  
+  // debug("%f", tiempoUs);
+  // debug("%i\n", ultimoTiempoUs);
   
   // inmediatamente después de presionar el botón para salir del ciclo, 
   // se apagan los motores
