@@ -26,8 +26,14 @@ const int sensor0 = A0;
 const int sensor1 = A1;
 const int sensor2 = A2;
 const int sensor3 = A3;
-const int sensor4 = A4;
-const int batteryControl = A5;
+const int sensor4 = A5;
+const int batteryControl = A4;
+
+// para batería
+// 8.23 V => 847 
+// 8.00 V => 822
+// 7.50 V  => 771 
+const int MINIMO_VALOR_BATERIA = 771;
 
 const int cantidadDeSensores = 5;
 int sensores[cantidadDeSensores];
@@ -43,8 +49,8 @@ const int tolerancia = 5; // Margen de ruido al medir negro.
 const int toleranciaBorde = 50; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
-const int velocidadMinima = 0;
-const int rangoVelocidad = 20;
+const int velocidadMinima = 5;
+const int rangoVelocidad = 40;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -53,7 +59,7 @@ int errD;
 
 int sensoresLinea = 0;
 const int centroDeLinea = 2000;
-const int coeficienteErrorP = 12;
+const int coeficienteErrorP = 9;
 const int coeficienteErrorI = 6000;
 const int coeficienteErrorD = 3;
 
@@ -79,12 +85,12 @@ void setup() {
   
   // como los sensores y el batteryControl se leen con AnalogRead, 
   // no hace falta ponerlos como entrada
-  // pinMode(sensor0, INPUT);
-  // pinMode(sensor1, INPUT);
-  // pinMode(sensor2, INPUT);
-  // pinMode(sensor3, INPUT);
-  // pinMode(sensor4, INPUT);
-  // pinMode(batteryControl, INPUT);
+  //pinMode(sensor0, INPUT);
+  //pinMode(sensor1, INPUT);
+  //pinMode(sensor2, INPUT);
+  //pinMode(sensor3, INPUT);
+  //pinMode(sensor4, INPUT);
+  //pinMode(batteryControl, INPUT);
   
   pinMode(ledArduino, OUTPUT);
   pinMode(led1, OUTPUT);  
@@ -144,6 +150,7 @@ void mostrarSensores() {
   //char buffer[50];
   // printf(buffer, "%.4d %.4d %.4d %.4d %.4d", sensores[izq], sensores[cenIzq], sensores[cen], sensores[cenDer], sensores[der]);
   // Serial.println(buffer);
+  debug("%.4d ", analogRead(batteryControl));
   debug("%.4d ", sensores[izq]);
   debug("%.4d ", sensores[cenIzq]);
   debug("%.4d ", sensores[cen]);
@@ -168,8 +175,44 @@ void apagarMotores() {
   analogWrite(pwmMotorI, 0);
 }
 
-void loop() {
+inline void chequearBateria() {
+  if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
+    digitalWrite(led1, HIGH);
+    digitalWrite(led2, HIGH);
+    digitalWrite(led3, HIGH);
+  } else {
+    digitalWrite(led1, LOW);
+    digitalWrite(led2, LOW);
+    digitalWrite(led3, LOW);
+  }
+}
+inline void chequearBateriaBloqueante() {
+  if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
+    while (!apretado(boton1)) {
+      digitalWrite(led1, HIGH);
+      digitalWrite(led2, HIGH);
+      digitalWrite(led3, HIGH);
+      delay(200);
+      digitalWrite(led1, LOW);
+      digitalWrite(led2, LOW);
+      digitalWrite(led3, LOW);
+      delay(200);
+    }
+    esperarReboteBoton();
+  }
+}
 
+void loop() {
+/*
+  while (1) {
+    obtenerSensores();
+    mostrarSensores();
+    delay(50);
+    //debug("%.4d ", analogRead(A4));
+    //debug("%.4d ", analogRead(A5));
+    //debug("%.4d\n ", analogRead(A6));
+  }
+*/
 /*
 while(1) {
 
@@ -194,6 +237,7 @@ while(1) {
     obtenerSensores();
     mostrarSensorLEDs(cen);
     mostrarSensores();
+    chequearBateriaBloqueante();
   }
   esperarReboteBoton();
   digitalWrite(led1, LOW);
@@ -208,14 +252,15 @@ while(1) {
   esperarReboteBoton();
 
   // arranque progresivo, de 0 a 250 en 75 ms
-  for (int i = 1; i <= 25; i++) {
+  /*for (int i = 1; i <= 25; i++) {
     analogWrite(pwmMotorD, i * 10);
     analogWrite(pwmMotorI, i * 10);
     delay(3);
-  }
+  }*/
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
+    chequearBateria();
     obtenerSensores();
     
     if (sensores[izq] > toleranciaBorde) {
@@ -280,19 +325,19 @@ while(1) {
       
       // printf de valores PID
       //printf("p:%5i i:%5i d:%5i rv:%5i\n", err_p, err_i, err_d, reduccion_velocidad);
-      debug("%.5i ", centroDeLinea);
-      debug("%.5i ", sensoresLinea);
-      debug("%.5i ", errP);
-      debug("%.5i\n", reduccionVelocidad);
+      debug("% .5i ", centroDeLinea);
+      debug("% .5i ", sensoresLinea);
+      debug("% .5i ", errP);
+      debug("% .5i\n", reduccionVelocidad);
 
       if (reduccionVelocidad < 0) {
         // a la derecha de la linea
-        analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad - reduccionVelocidad);
-        analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad);
+        //analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad + reduccionVelocidad);
+        //analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad);
       } else {
         // a la izquierda de la linea
-        analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
-        analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad - reduccionVelocidad);
+        //analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
+        //analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad - reduccionVelocidad);
       }
       
       tiempoUs = micros() - tiempoUs;
