@@ -68,7 +68,7 @@ int sensoresLinea = 0;
 const int centroDeLinea = 3000;
 const int coeficienteErrorP = 18;
 const int coeficienteErrorI = 2400;
-const int coeficienteErrorDmult = 20;
+const int coeficienteErrorDmult = 22;
 const int coeficienteErrorDdiv = 10;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
