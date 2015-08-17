@@ -69,7 +69,7 @@ const int centroDeLinea = 3000;
 const int coeficienteErrorPmult = 1;
 const int coeficienteErrorPdiv = 4;
 const int coeficienteErrorI = 2300;
-const int coeficienteErrorDmult = 14;
+const int coeficienteErrorDmult = 15;
 const int coeficienteErrorDdiv = 1;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
