@@ -15,7 +15,7 @@ const bool DEBUG = false;
 
 const int atras = HIGH;
 const int adelante = LOW;
-const int velocidadFreno = 50;
+const int velocidadFreno = 20;
 int velocidadMotorFrenado;
 const int haciaIzquierda = 0;
 const int haciaDerecha = 1;
@@ -65,7 +65,7 @@ const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último bo
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 //const int velocidadMinima = 10;
-const int rangoVelocidad = 120;
+const int rangoVelocidad = 255;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -77,7 +77,7 @@ const int centroDeLinea = 3000;
 const int coeficienteErrorPmult = 1;
 const int coeficienteErrorPdiv = 7;
 const int coeficienteErrorIdiv = 2500;
-const int coeficienteErrorDmult = 8;
+const int coeficienteErrorDmult = 19;
 const int coeficienteErrorDdiv = 1;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
@@ -191,7 +191,7 @@ void calibrarSensores() {
     if (sensores[i] < minimosSensores[i]) {
       minimosSensores[i] = sensores[i];
     }
-    if (sensores[i] > minimosSensores[i]) {
+    if (sensores[i] > maximosSensores[i]) {
       maximosSensores[i] = sensores[i];
     }
   }
@@ -345,7 +345,7 @@ void loop() {
   for (int i = 0; i < rangoVelocidad / 10; i++) {
     analogWrite(pwmMotorD, i * 10);
     analogWrite(pwmMotorI, i * 10);
-    delay(50);
+    delay(10);
   }
 
   // ejecuta el ciclo principal hasta que se presione el botón
