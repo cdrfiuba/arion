@@ -51,6 +51,7 @@ int sensores[cantidadDeSensores];
  // guarda los valores mínimos y máximos de calibración
 int minimosSensores[cantidadDeSensores];
 int maximosSensores[cantidadDeSensores];
+bool calibracionReseteada = false;
 
 // indices de array sensores
 const int izq    = 0;
@@ -141,6 +142,7 @@ void setup() {
   estadoActualAdentro = true;
   tiempoUs = 1.0;
   ultimoTiempoUs = 0;
+  calibracionReseteada = false;
   
 }
 
@@ -179,12 +181,6 @@ inline void obtenerSensoresCalibrados() {
 }
 
 void calibrarSensores() {
-  // reseteo la calibración
-  for (int i = 0; i < cantidadDeSensores; i++) {
-    minimosSensores[i] = 1023;
-    maximosSensores[i] = 0;
-  }
-  
   // leo los sensores, y guardo los mínimos y los máximos
   obtenerSensores();
   for (int i = 0; i < cantidadDeSensores; i++) {
@@ -194,6 +190,18 @@ void calibrarSensores() {
     if (sensores[i] > maximosSensores[i]) {
       maximosSensores[i] = sensores[i];
     }
+  }
+  if (DEBUG) {
+    debug("%.4d ", minimosSensores[izq]);
+    debug("%.4d ", minimosSensores[cenIzq]);
+    debug("%.4d ", minimosSensores[cen]);
+    debug("%.4d ", minimosSensores[cenDer]);
+    debug("%.4d - ", minimosSensores[der]);
+    debug("%.4d ", maximosSensores[izq]);
+    debug("%.4d ", maximosSensores[cenIzq]);
+    debug("%.4d ", maximosSensores[cen]);
+    debug("%.4d ", maximosSensores[cenDer]);
+    debug("%.4d\n", maximosSensores[der]);
   }
 }
 
@@ -325,6 +333,14 @@ void loop() {
     chequearBateriaBloqueante();
     
     while (apretado(boton3)) {
+      if (!calibracionReseteada) {
+        // reseteo la calibración
+        for (int i = 0; i < cantidadDeSensores; i++) {
+          minimosSensores[i] = 1023;
+          maximosSensores[i] = 0;
+        }
+        calibracionReseteada = true;
+      }
       digitalWrite(led1, HIGH);
       calibrarSensores();
       digitalWrite(led1, LOW);
