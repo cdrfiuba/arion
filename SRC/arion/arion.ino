@@ -13,6 +13,14 @@ char debug_string_buffer[50];
   
 const bool DEBUG = false;
 
+const int atras = HIGH;
+const int adelante = LOW;
+const int velocidadFreno = 50;
+int velocidadMotorFrenado;
+const int haciaIzquierda = 0;
+const int haciaDerecha = 1;
+int direccionMovimientoLateral;
+
 // definición de pines del micro.
 const int pwmMotorD = 11;
 const int pwmMotorI = 10;
@@ -56,8 +64,8 @@ const int tolerancia = 0; // Margen de ruido al medir negro.
 const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
 
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
-const int velocidadMinima = 10;
-const int rangoVelocidad = 75;
+//const int velocidadMinima = 10;
+const int rangoVelocidad = 120;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -67,9 +75,9 @@ int errD;
 int sensoresLinea = 0;
 const int centroDeLinea = 3000;
 const int coeficienteErrorPmult = 1;
-const int coeficienteErrorPdiv = 4;
-const int coeficienteErrorI = 2300;
-const int coeficienteErrorDmult = 15;
+const int coeficienteErrorPdiv = 7;
+const int coeficienteErrorIdiv = 2500;
+const int coeficienteErrorDmult = 8;
 const int coeficienteErrorDdiv = 1;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
@@ -111,8 +119,10 @@ void setup() {
   pinMode(boton2, INPUT);
   pinMode(boton3, INPUT);
 
-//  Serial.begin(9600);
-
+  if (DEBUG) {
+    Serial.begin(9600);
+  }
+  
   for (int i = 0; i < cantidadDeSensores; i++) {
     sensores[i] = 0;
     minimosSensores[i] = 0;
@@ -120,6 +130,8 @@ void setup() {
   }
   
   apagarMotores();
+  digitalWrite(sentidoMotorI, adelante);
+  digitalWrite(sentidoMotorD, adelante);
   
   errP = 0;
   errI = 0;
@@ -236,6 +248,43 @@ inline void chequearBateriaBloqueante() {
 }
 
 void loop() {
+
+  /*
+  digitalWrite(led1, HIGH);
+  digitalWrite(led2, HIGH);
+  digitalWrite(led3, HIGH);
+  delay(1000);
+  digitalWrite(led1, LOW);
+  delay(1000);
+  digitalWrite(led2, LOW);
+  delay(1000);
+  digitalWrite(led3, LOW);
+
+  for (int i = 0; i < (velocidadMinima + rangoVelocidad) / 10; i++) {
+    analogWrite(pwmMotorD, i * 10);
+    analogWrite(pwmMotorI, i * 10);
+    delay(100);
+  }
+
+  analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
+  analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad);
+  delay(500);
+
+  digitalWrite(led1, HIGH);
+  digitalWrite(led2, HIGH);
+  digitalWrite(led3, HIGH);
+  digitalWrite(sentidoMotorI, HIGH);
+  digitalWrite(sentidoMotorD, HIGH);
+  delay(10);
+  digitalWrite(sentidoMotorI, LOW);
+  digitalWrite(sentidoMotorD, LOW);
+  analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
+  analogWrite(pwmMotorD, velocidadMinima);
+
+  while(1);
+
+  */
+  
 /*
   while (1) {
     obtenerSensores();
@@ -293,12 +342,11 @@ void loop() {
   while (apretado(boton1));
   esperarReboteBoton();
 
-  // arranque progresivo, de 0 a 250 en 75 ms
-  /*for (int i = 1; i <= 25; i++) {
+  for (int i = 0; i < rangoVelocidad / 10; i++) {
     analogWrite(pwmMotorD, i * 10);
     analogWrite(pwmMotorI, i * 10);
-    delay(3);
-  }*/
+    delay(50);
+  }
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
@@ -349,7 +397,7 @@ void loop() {
       //}
       errPAnterior = errP;
       //delayMicroseconds (2000);
-      reduccionVelocidad = (coeficienteErrorPmult * errP) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv + errI / coeficienteErrorI;
+      reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv + errI / coeficienteErrorIdiv;
       
       // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166 
       // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
@@ -358,20 +406,49 @@ void loop() {
       // // Para un caso normal, en que err_p varie 30 entre una medicion y la siguiente, estará acotado entre -45 y +45
       
       // constrain
-      if (reduccionVelocidad < -rangoVelocidad) {
-        reduccionVelocidad = -rangoVelocidad;
-      } else if (reduccionVelocidad > rangoVelocidad) {
-        reduccionVelocidad = rangoVelocidad;
+      if (reduccionVelocidad < -rangoVelocidad - velocidadFreno) {
+        reduccionVelocidad = -rangoVelocidad - velocidadFreno;
+      } else if (reduccionVelocidad > rangoVelocidad + velocidadFreno) {
+        reduccionVelocidad = rangoVelocidad + velocidadFreno;
       }
 
       if (reduccionVelocidad < 0) {
-        // me muevo hacia la izquierda
-        analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad + reduccionVelocidad);
-        analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad);
+        direccionMovimientoLateral = haciaIzquierda;
       } else {
-        // me muevo hacia la derecha
-        analogWrite(pwmMotorI, velocidadMinima + rangoVelocidad);
-        analogWrite(pwmMotorD, velocidadMinima + rangoVelocidad - reduccionVelocidad);
+        direccionMovimientoLateral = haciaDerecha;
+      }
+
+      reduccionVelocidad = abs(reduccionVelocidad);
+      velocidadMotorFrenado = abs(rangoVelocidad - reduccionVelocidad);
+      
+      if (direccionMovimientoLateral == haciaIzquierda) {
+        // si la reducción es mayor al rango de velocidad, 
+        // uno de los motores va para atrás
+        if (reduccionVelocidad > rangoVelocidad) {
+          digitalWrite(sentidoMotorI, atras);
+          digitalWrite(sentidoMotorD, adelante);
+          analogWrite(pwmMotorI, 255 - velocidadMotorFrenado);
+          analogWrite(pwmMotorD, rangoVelocidad);
+        } else {
+          digitalWrite(sentidoMotorI, adelante);
+          digitalWrite(sentidoMotorD, adelante);
+          analogWrite(pwmMotorI, velocidadMotorFrenado);
+          analogWrite(pwmMotorD, rangoVelocidad);
+        }
+      } else if (direccionMovimientoLateral == haciaDerecha) {
+        // si la reducción es mayor al rango de velocidad, 
+        // uno de los motores va para atrás
+        if (reduccionVelocidad > rangoVelocidad) {
+          digitalWrite(sentidoMotorI, adelante);
+          digitalWrite(sentidoMotorD, atras);
+          analogWrite(pwmMotorI, rangoVelocidad);
+          analogWrite(pwmMotorD, 255 - velocidadMotorFrenado);
+        } else {
+          digitalWrite(sentidoMotorI, adelante);
+          digitalWrite(sentidoMotorD, adelante);
+          analogWrite(pwmMotorI, rangoVelocidad);
+          analogWrite(pwmMotorD, velocidadMotorFrenado);
+        }
       }
       
       // tiempoUs = (double)micros() / 1000.0 - tiempoUs;
