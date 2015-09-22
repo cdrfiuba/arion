@@ -1,0 +1,6 @@
+(fp_lib_table
+  (lib (name SOT223-5)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/SOT223-5.mod")(options "")(descr ""))
+  (lib (name ArduProMiniTKB)(type Legacy)(uri "$(KIPRJMOD)/Bibliotecas/ArduProMiniTKB.mod")(options "")(descr ""))
+  (lib (name carpeta)(type KiCad)(uri "$(KIPRJMOD)/Bibliotecas/carpeta.pretty")(options "")(descr ""))
+  (lib (name Bibliotecas)(type KiCad)(uri "$(KIPRJMOD)/Bibliotecas.pretty")(options "")(descr ""))
+)
