@@ -8,7 +8,7 @@ char debug_string_buffer[50];
 #define debug(formato, valor) \
   sprintf(debug_string_buffer, formato, valor); \
   Serial.print(debug_string_buffer); \
-  delay(1);
+  delayMicroseconds(70);
 
 // Configuracion de debug
 const bool DEBUG = false;
@@ -67,20 +67,20 @@ bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
 const int derecha = 1; // No tocar: bordes para modo "me fui"
 const int izquierda = 0; // No tocar: bordes para modo "me fui"
 const int tolerancia = 0; // Margen de ruido al medir negro.
-const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
+const int toleranciaBorde = 150; // Mínimo para decidir cuál fue el último borde
 int ultimoBorde;
 
 // para calcular tiempo entre ciclos de PID.
 // no debe ser 0, pues se usa para dividir
-long int ultimoTiempoUs = 0; // guarda el valor de micros()
-int tiempoUs = 0; // guarda el tiempo del ciclo
-const int tiempoCicloReferencia = 1290; // TODO habria que recalcularlo
+unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
+long int tiempoUs = 0; // guarda el tiempo del ciclo
+const long int tiempoCicloReferencia = 1290 ; // TODO habria que recalcularlo 1290 2380
 
 //// Variables PID principal ////
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 //OBSOLETE const int velocidadMinima = 10;
 //OBSOLETE const int velocidadFreno = 25; //50
-const int rangoVelocidad = 70; //120
+const int rangoVelocidad = 100; //120
 int reduccionVelocidad;
 int errP, errD, errPAnterior;
 long errI; // errores integrales deben ser long
@@ -100,31 +100,31 @@ int motorDerErrP, motorDerErrPAnterior, motorDerErrD; // variables de errores mo
 long motorIzqErrI, motorDerErrI; // errores integrales deben ser long
 int pwmAvgMotorI, pwmAvgMotorD; // estimadores de RPM expresado en PWM
 int expAvgWeight = 950;  // 1000 = creo solo en el pasado; 0 = creo solo en lo nuevo
-const int motorIzqRateLimit = 3; // Maximo incremento ciclo a ciclo de control. TODO deberia considerar tiempo y no ciclo a ciclo
-const int motorDerRateLimit = 3; // Maximo incremento ciclo a ciclo de control. TODO deberia considerar tiempo y no ciclo a ciclo
+const int motorRateFwd = 10; // Maximo incremento ciclo a ciclo de control. TODO deberia considerar tiempo y no ciclo a ciclo
+const int motorRateBwd = 45; // Maximo incremento ciclo a ciclo de control. TODO deberia considerar tiempo y no ciclo a ciclo
 
 // Tests
-int cant_ciclos_test = 400;
+int cant_ciclos_test = 00;
 int num_ciclo_test = 0;
 int setpoint_test = 70;
 
 // Parametrizacion //////////////////////////////////////
 // PID General
 const int coeficienteErrorPmult = 1; // 1
-const int coeficienteErrorPdiv = 5;  // 7
+const int coeficienteErrorPdiv = 18;  // 7
 const int coeficienteErrorIdiv = 32000; // 2500
-const int coeficienteErrorDmult = 8; // 8
-const int coeficienteErrorDdiv = 1; // 1
+const int coeficienteErrorDmult = 3; // 8
+const int coeficienteErrorDdiv = 2; // 1
 
 // Parametros PID motor Izquierdo
-const int coefMotorIErrPmult = 20;
+const int coefMotorIErrPmult = 10; //20
 const int coefMotorIErrPdiv  = 1;
 const int coefMotorIErrDmult = 20;
 const int coefMotorIErrDdiv  = 1;
 const int coefMotorIErrIdiv  = 32000; // Valor alto para desactivar efecto
 
 // Parametros PID motor Derecho
-const int coefMotorDErrPmult = 20;
+const int coefMotorDErrPmult = 10; //20
 const int coefMotorDErrPdiv = 1;
 const int coefMotorDErrDmult = 20;
 const int coefMotorDErrDdiv = 1;
@@ -160,7 +160,7 @@ void setup() {
   pinMode(boton3, INPUT);
 
   if (DEBUG) {
-    Serial.begin(9600);
+    Serial.begin(115200);
   }
 
   for (int i = 0; i < cantidadDeSensores; i++) {
@@ -196,6 +196,7 @@ void setup() {
 
   // Inicializacion test
   setpoint_test = rangoVelocidad;
+  num_ciclo_test = 0;
 
 
 }
@@ -465,7 +466,22 @@ void loop() {
       // TODO implementar caja negra para reportar overflow
       errPAnterior = errP;
       reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv + errI / coeficienteErrorIdiv;
+      //reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv;
 
+
+      velocidadPenalizacion = abs(errI)/300 ;
+      velocidadPenalizacion = constrain(velocidadPenalizacion, 0, rangoVelocidad - 40);
+      errI = (errI*98)/100;
+
+//      if (abs(errI) > 1000)
+//      {
+//        velocidadPenalizacion = abs(errI)/100 ;
+//        
+//        errI = (errI*95)/100;
+//      }
+//      else
+//        velocidadPenalizacion = 0;
+        
       // COSAS VIEJAS
       // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166
       // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
@@ -473,8 +489,6 @@ void loop() {
       // // err_d toma valores entre -5k y 5k, por lo que su aporte a diff_potencia esta acotado entre -inf y +inf (para los niveles de representacion que manejamos).
       // // Para un caso normal, en que err_p varie 30 entre una medicion y la siguiente, estará acotado entre -45 y +45
 
-      // constrains de actuacion
-      reduccionVelocidad  = constrain(reduccionVelocidad, - (rangoVelocidad - velocidadPenalizacion), rangoVelocidad - velocidadPenalizacion); 
       /*
       if (reduccionVelocidad < - (rangoVelocidad - velocidadPenalizacion) ) {
         reduccionVelocidad = -rangoVelocidad;
@@ -492,6 +506,8 @@ void loop() {
 
       // Calculo del setting point de los PIDs de motores
       reduccionVelocidad = abs(reduccionVelocidad);
+      // constrains de actuacion
+      reduccionVelocidad  = constrain(reduccionVelocidad, 0, rangoVelocidad - velocidadPenalizacion); 
       velocidadMotorFrenado = rangoVelocidad - velocidadPenalizacion - reduccionVelocidad;
       velocidadMotorNoFrenado = rangoVelocidad - velocidadPenalizacion;
 
@@ -505,18 +521,17 @@ void loop() {
 
 
       // HARDCODE PID MOTORES TEST
-      /*
-      if (num_ciclo_test++ > cant_ciclos_test) {
-        num_ciclo_test = 0;
-        if ( setpoint_test  == rangoVelocidad)
-          setpoint_test = 0;
-        else
-          setpoint_test = rangoVelocidad;
+      if (cant_ciclos_test > 0) {
+        if (num_ciclo_test++ > cant_ciclos_test) {
+          num_ciclo_test = 0;
+          if ( setpoint_test  == rangoVelocidad)
+            setpoint_test = 0;
+          else
+            setpoint_test = rangoVelocidad;
+        }
+        motorISetPoint = setpoint_test;
+        motorDSetPoint = setpoint_test;
       }
-      motorISetPoint = setpoint_test;
-      motorDSetPoint = setpoint_test;
-      */
-
 
 
       if (DEBUG_SETPOINT) {
@@ -561,8 +576,8 @@ void loop() {
       }
       
       // Rate Limit
-      motorIzqPIDout = constrain(motorIzqPIDout, motorIzqPIDoutAnterior - motorIzqRateLimit, motorIzqPIDoutAnterior + motorIzqRateLimit);
-      motorDerPIDout = constrain(motorDerPIDout, motorDerPIDoutAnterior - motorDerRateLimit, motorDerPIDoutAnterior + motorDerRateLimit);
+      motorIzqPIDout = constrain(motorIzqPIDout, motorIzqPIDoutAnterior - motorRateBwd, motorIzqPIDoutAnterior + motorRateFwd); // GRASADA HC
+      motorDerPIDout = constrain(motorDerPIDout, motorDerPIDoutAnterior - motorRateBwd, motorDerPIDoutAnterior + motorRateFwd); // GRASADA HC
 
       // Restriccion de rango dinamico
       motorIzqPIDout = constrain(motorIzqPIDout, -255, 255);
@@ -609,11 +624,15 @@ void loop() {
 
       // tiempoUs = (double)micros() / 1000.0 - tiempoUs;
       if (DEBUG) {
-        tiempoUs = micros() - ultimoTiempoUs;
-        debug("%.4i ", tiempoUs);
-        debug("% .4i ", sensoresLinea);
+//        tiempoUs = micros() - ultimoTiempoUs;
+        debug("%.4li ", tiempoUs);
+//        debug("% .4i ", sensoresLinea);
         debug("% .4i ", errP);
-        debug("% .3i\n", reduccionVelocidad);
+        debug("% .3i ", velocidadMotorFrenado);
+//        debug("% .3i ", velocidadMotorNoFrenado);
+        debug("% .3i ", velocidadPenalizacion);
+//        debug("% .3i\n", reduccionVelocidad);
+        debug("% .6li\n", errI);
       }
       tiempoUs = micros() - ultimoTiempoUs;
       ultimoTiempoUs = micros();
