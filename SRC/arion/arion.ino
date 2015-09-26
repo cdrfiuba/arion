@@ -65,7 +65,7 @@ const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último bo
 const int velocidadFreno = 20;
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 //const int velocidadMinima = 10;
-const int rangoVelocidad = 140;
+const int rangoVelocidad = 150;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -74,8 +74,8 @@ int errD;
 
 int sensoresLinea = 0;
 const int centroDeLinea = 3000;
-const int coeficienteErrorPmult = 1;
-const int coeficienteErrorPdiv = 7;
+const int coeficienteErrorPmult =2;
+const int coeficienteErrorPdiv = 12;
 const int coeficienteErrorIdiv = 2500;
 const int coeficienteErrorDmult = 19;
 const int coeficienteErrorDdiv = 1;
