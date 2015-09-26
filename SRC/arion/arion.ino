@@ -11,7 +11,7 @@ char debug_string_buffer[50];
   Serial.print(debug_string_buffer); \
   delay(1);
   
-const bool DEBUG = false;
+const bool DEBUG = true;
 
 const int atras = HIGH;
 const int adelante = LOW;
