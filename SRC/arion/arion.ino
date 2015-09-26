@@ -65,7 +65,7 @@ const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último bo
 const int velocidadFreno = 20;
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 //const int velocidadMinima = 10;
-const int rangoVelocidad = 150;
+const int rangoVelocidad = 140;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
