@@ -11,11 +11,10 @@ char debug_string_buffer[50];
   Serial.print(debug_string_buffer); \
   delay(1);
   
-const bool DEBUG = true;
+const bool DEBUG = false;
 
 const int atras = HIGH;
 const int adelante = LOW;
-const int velocidadFreno = 20;
 int velocidadMotorFrenado;
 const int haciaIzquierda = 0;
 const int haciaDerecha = 1;
@@ -63,9 +62,10 @@ const int der    = 4;
 const int tolerancia = 0; // Margen de ruido al medir negro.
 const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
 
+const int velocidadFreno = 20;
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 //const int velocidadMinima = 10;
-const int rangoVelocidad = 255;
+const int rangoVelocidad = 150;
 int reduccionVelocidad;
 int errP;
 int errPAnterior;
@@ -201,7 +201,7 @@ void mostrarSensorLEDs(int sensor) {
   if ((sensor >= cantidadDeSensores) || (sensor < 0)) {
     return; 
   }
-  digitalWrite(led1, ((sensores[sensor] / 1024) ? HIGH : LOW));
+  digitalWrite(led1, ((sensores[sensor] / 768) ? HIGH : LOW));
   digitalWrite(led2, ((sensores[sensor] /  512) ? HIGH : LOW));
   digitalWrite(led3, ((sensores[sensor] /  256) ? HIGH : LOW));
 }
@@ -350,7 +350,7 @@ void loop() {
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
-    chequearBateria();
+    //chequearBateria();
     obtenerSensoresCalibrados();
     
     if (sensores[izq] > toleranciaBorde) {
