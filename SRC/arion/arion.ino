@@ -81,8 +81,8 @@ int errD;
 
 int sensoresLinea = 0;
 const int centroDeLinea = 3000;
-const int coeficienteErrorPmult = 1;
-const int coeficienteErrorPdiv = 7;
+const int coeficienteErrorPmult =2;
+const int coeficienteErrorPdiv = 12;
 const int coeficienteErrorIdiv = 2500;
 const int coeficienteErrorDmult = 19;
 const int coeficienteErrorDdiv = 1;
