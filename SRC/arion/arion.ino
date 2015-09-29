@@ -51,6 +51,8 @@ int sensores[cantidadDeSensores];
  // guarda los valores mínimos y máximos de calibración
 int minimosSensores[cantidadDeSensores];
 int maximosSensores[cantidadDeSensores];
+bool calibracionReseteada = false;
+
 
 int ultimoValorSensorCurva = 0;
 
@@ -63,14 +65,14 @@ const int der    = 4;
 const int curva  = 5;
 
 
-const int tolerancia = 0; // Margen de ruido al medir negro.
-const int toleranciaBorde = 200; // Mínimo para decidir cuál fue el último borde
+const int tolerancia = 50; // Margen de ruido al medir negro.
+const int toleranciaBorde = 500; // Valor a partir del cual decimos que estamos casi afuera
 
 const int velocidadFreno = 20;
 // velocidadMinima + rangoVelocidad <= 255 (o explota)
 //const int velocidadMinima = 10;
-const int rangoVelocidadRecta = 255; // 200 es estable
-const int rangoVelocidadCurva = 100; // 140 es estable y rapido
+const int rangoVelocidadRecta = 155; // 200 es estable
+const int rangoVelocidadCurva = 155; // 140 es estable y rapido
 int rangoVelocidad;
 int reduccionVelocidad;
 int errP;
@@ -86,13 +88,16 @@ const int coeficienteErrorIdiv = 2500;
 const int coeficienteErrorDmult = 19;
 const int coeficienteErrorDdiv = 1;
 
-const int TIEMPO_MODO_CURVA = 10; // ms
-const bool MODO_CURVA_INICIAL = false;
+const int DEBOUNCE_MODO_CURVA = 10; // ms
+const bool MODO_CURVA_INICIAL = true;
 const int VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA = 255; // 255 - VELOCIDAD en el codigo
 const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 15; // ms
 const int TOLERANCIA_SENSOR_CURVA = 600;
+const int MAXIMO_SENSORES_LINEA = 5000;
+const int MINIMO_SENSORES_LINEA = 1000;
 
 bool estadoActualAdentro; // determina si se usa modo PID o modo "me fui"
+bool ultimoEstadoActualAdentro; // determina si se usa modo PID o modo "me fui"
   // bordes para modo "me fui"
 const int derecha = 1;
 const int izquierda = 0;
@@ -135,9 +140,11 @@ void setup() {
   pinMode(boton3, INPUT);
 
   if (DEBUG) {
-    Serial.begin(9600);
+    Serial.begin(115200);
   }
-  
+
+  // TODO: sacarlo del setup, porque es una paja calibrar 
+  // antes de cada largada cuando se hacen pruebas
   for (int i = 0; i < cantidadDeSensores; i++) {
     sensores[i] = 0;
     minimosSensores[i] = 0;
@@ -145,8 +152,7 @@ void setup() {
   }
   
   apagarMotores();
-  digitalWrite(sentidoMotorI, adelante);
-  digitalWrite(sentidoMotorD, adelante);
+  
   
   errP = 0;
   errI = 0;
@@ -154,11 +160,14 @@ void setup() {
   errPAnterior = 0;
   ultimoBorde = izquierda;
   estadoActualAdentro = true;
+  ultimoEstadoActualAdentro = true;
   tiempoUs = tiempoCicloReferencia;
   ultimoTiempoUs = 0;
   ultimoTiempoModoCurva = 0;
   modoCurva = MODO_CURVA_INICIAL;
   ultimoValorSensorCurva = 0;
+  calibracionReseteada = false;
+
   
 }
 
@@ -198,11 +207,6 @@ inline void obtenerSensoresCalibrados() {
 }
 
 void calibrarSensores() {
-  // reseteo la calibración
-  for (int i = 0; i < cantidadDeSensores; i++) {
-    minimosSensores[i] = 1023;
-    maximosSensores[i] = 0;
-  }
   
   // leo los sensores, y guardo los mínimos y los máximos
   obtenerSensores();
@@ -226,16 +230,20 @@ void mostrarSensorLEDs(int sensor) {
 }
 
 void mostrarSensores() {
-  debug("%.4d ", analogRead(batteryControl));
-  debug("%.4d ", sensores[izq]);
-  debug("%.4d ", sensores[cenIzq]);
-  debug("%.4d ", sensores[cen]);
-  debug("%.4d ", sensores[cenDer]);
-  debug("%.4d ", sensores[der]);
-  debug("%.1d\n", sensores[curva]);
+  if (DEBUG) {
+    debug("%.4d ", analogRead(batteryControl));
+    debug("%.4d ", sensores[izq]);
+    debug("%.4d ", sensores[cenIzq]);
+    debug("%.4d ", sensores[cen]);
+    debug("%.4d ", sensores[cenDer]);
+    debug("%.4d ", sensores[der]);
+    debug("%.1d\n", sensores[curva]);
+  }
 }
 
 void apagarMotores() {
+  digitalWrite(sentidoMotorI, adelante);
+  digitalWrite(sentidoMotorD, adelante);
   analogWrite(pwmMotorD, 0);
   analogWrite(pwmMotorI, 0);
 }
@@ -349,6 +357,15 @@ void loop() {
     chequearBateriaBloqueante();
     
     while (apretado(boton3)) {
+      if (!calibracionReseteada) {
+        // reseteo la calibración
+        for (int i = 0; i < cantidadDeSensores; i++) {
+          minimosSensores[i] = 1023;
+          maximosSensores[i] = 0;
+        }
+        calibracionReseteada = true;
+      }
+
       digitalWrite(led1, HIGH);
       calibrarSensores();
       digitalWrite(led1, LOW);
@@ -386,143 +403,163 @@ void loop() {
     }
 
     // si me fui, entro en modo "corrección máxima"
-    if ((sensores[izq]    < tolerancia) && 
-        (sensores[cenIzq] < tolerancia) && 
+    if ((sensores[cenIzq] < tolerancia) && 
         (sensores[cen]    < tolerancia) && 
-        (sensores[cenDer] < tolerancia) && 
-        (sensores[der]    < tolerancia)) {
-      estadoActualAdentro = false;
+        (sensores[cenDer] < tolerancia)) {
+      if ( ((sensores[izq]  < tolerancia) && (sensores[der] < toleranciaBorde) ) ||
+           ((sensores[izq]  < toleranciaBorde) && (sensores[der] < tolerancia) ) ) {
+        estadoActualAdentro = false;
+        digitalWrite(led3, HIGH);
+        if (estadoActualAdentro != ultimoEstadoActualAdentro) {
+          frenarMotores();
+        }
+      } else {
+        digitalWrite(led3, LOW);
+        estadoActualAdentro = true;
+      }
+      
     } else {
       estadoActualAdentro = true;
-    } 
+      digitalWrite(led3, LOW);
+    }
+    ultimoEstadoActualAdentro = estadoActualAdentro;
     
-    if (estadoActualAdentro) {
-      // modo pid
-      // linea = (0 * s0 + 1000 * s1 + 2000 * s2 + 3000 * s3 + 4000 * s4) / (s0 + s1 + s2 + s3 + s4)
-      // 0 a 4000, donde 2000 es el centroDeLinea
-      sensoresLinea = (
-        (long)sensores[izq]    * 0 + 
-        (long)sensores[cenIzq] * 2000 + 
-        (long)sensores[cen]    * 3000 + 
-        (long)sensores[cenDer] * 4000 + 
-        (long)sensores[der]    * 6000
-      ) / (
-        (long)sensores[izq]    + 
-        (long)sensores[cenIzq] + 
-        (long)sensores[cen]    + 
-        (long)sensores[cenDer] + 
-        (long)sensores[der]
-      );
-      
-      if (sensores[curva] == 1 && sensores[curva] != ultimoValorSensorCurva) {
-        if (millis() - ultimoTiempoModoCurva > TIEMPO_MODO_CURVA){
-          // tengo seguridad de que paso el rebote del sensor
-          modoCurva = !modoCurva;
-          ultimoTiempoModoCurva = millis();
-          // si paso a modo curva, freno porque venia rapido
-          if (modoCurva == false) {
-            digitalWrite(sentidoMotorI, atras); 
-            digitalWrite(sentidoMotorD, atras); 
-            analogWrite(pwmMotorI, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
-            analogWrite(pwmMotorD, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
-            delay(DELAY_FRENO_POR_CAMBIO_MODO_CURVA); // ms
-            digitalWrite(sentidoMotorI, adelante); 
-            digitalWrite(sentidoMotorD, adelante); 
-          }
-        }
-      }
-      ultimoValorSensorCurva = sensores[curva];
-      
-      if (modoCurva) {
-        rangoVelocidad = rangoVelocidadCurva;
-      } else {
-        rangoVelocidad = rangoVelocidadRecta;
-      }
   
-      errP = sensoresLinea - centroDeLinea;
-      errI = errP * tiempoCicloReferencia / tiempoUs;
-      errD = (errP - errPAnterior) * tiempoUs / tiempoCicloReferencia;
-      // err_i += (err_p >> 8);
-      //if ( (err_i >= VALOR_MAX_INT16 - VALOR_MAX_ERR_P) || (err_i <= -(VALOR_MAX_INT16 - VALOR_MAX_ERR_P)) ) {
-      //    err_i -= (err_p >> 8);
-      //}
-      errPAnterior = errP;
-      //delayMicroseconds (2000);
-      reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv + errI / coeficienteErrorIdiv;
-      
-      // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166 
-      // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
-      // // err_i toma valores entre -32k y 32k, por lo que su aporte a diff_potencia esta acotado entre -32 y +32 (-32 y +32 para 6 sensores)
-      // // err_d toma valores entre -5k y 5k, por lo que su aporte a diff_potencia esta acotado entre -inf y +inf (para los niveles de representacion que manejamos). 
-      // // Para un caso normal, en que err_p varie 30 entre una medicion y la siguiente, estará acotado entre -45 y +45
-      
-      // constrain
-      if (reduccionVelocidad < -rangoVelocidad - velocidadFreno) {
-        reduccionVelocidad = -rangoVelocidad - velocidadFreno;
-      } else if (reduccionVelocidad > rangoVelocidad + velocidadFreno) {
-        reduccionVelocidad = rangoVelocidad + velocidadFreno;
-      }
+    // modo pid
+    // linea = (0 * s0 + 1000 * s1 + 2000 * s2 + 3000 * s3 + 4000 * s4) / (s0 + s1 + s2 + s3 + s4)
+    // 0 a 4000, donde 2000 es el centroDeLinea
+    sensoresLinea = (
+      (long)sensores[izq]    * 0 + 
+      (long)sensores[cenIzq] * 2000 + 
+      (long)sensores[cen]    * 3000 + 
+      (long)sensores[cenDer] * 4000 + 
+      (long)sensores[der]    * 6000
+    ) / (
+      (long)sensores[izq]    + 
+      (long)sensores[cenIzq] + 
+      (long)sensores[cen]    + 
+      (long)sensores[cenDer] + 
+      (long)sensores[der]
+    );
 
-      if (reduccionVelocidad < 0) {
-        direccionMovimientoLateral = haciaIzquierda;
-      } else {
-        direccionMovimientoLateral = haciaDerecha;
-      }
-
-      reduccionVelocidad = abs(reduccionVelocidad);
-      velocidadMotorFrenado = abs(rangoVelocidad - reduccionVelocidad);
-      
-      if (direccionMovimientoLateral == haciaIzquierda) {
-        // si la reducción es mayor al rango de velocidad, 
-        // uno de los motores va para atrás
-        if (reduccionVelocidad > rangoVelocidad) {
-          digitalWrite(sentidoMotorI, atras);
-          digitalWrite(sentidoMotorD, adelante);
-          analogWrite(pwmMotorI, 255 - velocidadMotorFrenado);
-          analogWrite(pwmMotorD, rangoVelocidad);
-        } else {
-          digitalWrite(sentidoMotorI, adelante);
-          digitalWrite(sentidoMotorD, adelante);
-          analogWrite(pwmMotorI, velocidadMotorFrenado);
-          analogWrite(pwmMotorD, rangoVelocidad);
-        }
-      } else if (direccionMovimientoLateral == haciaDerecha) {
-        // si la reducción es mayor al rango de velocidad, 
-        // uno de los motores va para atrás
-        if (reduccionVelocidad > rangoVelocidad) {
-          digitalWrite(sentidoMotorI, adelante);
-          digitalWrite(sentidoMotorD, atras);
-          analogWrite(pwmMotorI, rangoVelocidad);
-          analogWrite(pwmMotorD, 255 - velocidadMotorFrenado);
-        } else {
-          digitalWrite(sentidoMotorI, adelante);
-          digitalWrite(sentidoMotorD, adelante);
-          analogWrite(pwmMotorI, rangoVelocidad);
-          analogWrite(pwmMotorD, velocidadMotorFrenado);
-        }
-      }
-      
-      // tiempoUs = (double)micros() / 1000.0 - tiempoUs;
-      if (DEBUG) {
-        tiempoUs = micros() - ultimoTiempoUs;
-        debug("%.4i ", tiempoUs);
-        debug("% .4i ", sensoresLinea);
-        debug("% .4i ", errP);
-        debug("% .3i\n", reduccionVelocidad);
-      }
-      tiempoUs = micros() - ultimoTiempoUs;
-      ultimoTiempoUs = micros();
-      
-    } else {
-      // modo me fui
+    // Clampea valor extremo para indicarle al PID 
+    // que corrija con toda su fuerza
+    if (estadoActualAdentro == false) {
       if (ultimoBorde == izquierda) {
-        analogWrite(pwmMotorI, 0);
-        analogWrite(pwmMotorD, 20);
-      } else if (ultimoBorde == derecha) {
-        analogWrite(pwmMotorI, 20);
-        analogWrite(pwmMotorD, 0);
+        sensoresLinea = 0;
+      } else {
+        sensoresLinea = 6000;
       }
     }
+    
+    if (sensores[curva] == 1 && sensores[curva] != ultimoValorSensorCurva) {
+      if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA){
+        // tengo seguridad de que paso el rebote del sensor
+        modoCurva = !modoCurva;
+        ultimoTiempoModoCurva = millis();
+        // si paso a modo curva, freno porque venia rapido
+        if (modoCurva == false) {
+          frenarMotores();
+        }
+      }
+    }
+    ultimoValorSensorCurva = sensores[curva];
+    
+    if (modoCurva) {
+      rangoVelocidad = rangoVelocidadCurva;
+    } else {
+      rangoVelocidad = rangoVelocidadRecta;
+    }
+
+    if (estadoActualAdentro == false ) {
+      rangoVelocidad = 20;
+    }
+
+    errP = sensoresLinea - centroDeLinea;
+    errI = errP * tiempoCicloReferencia / tiempoUs;
+    errD = (errP - errPAnterior) * tiempoUs / tiempoCicloReferencia;
+    // err_i += (err_p >> 8);
+    //if ( (err_i >= VALOR_MAX_INT16 - VALOR_MAX_ERR_P) || (err_i <= -(VALOR_MAX_INT16 - VALOR_MAX_ERR_P)) ) {
+    //    err_i -= (err_p >> 8);
+    //}
+    errPAnterior = errP;
+    //delayMicroseconds (2000);
+//    reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv + errI / coeficienteErrorIdiv;
+    reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv;
+    
+    // errP va entre -2000 y 2000, con p=1/12 reduccionVelocidad va entre -166 y +166 
+    // errD va entre -4000 y 4000, con d=1/30 reduccionVelocidad va entre -133 y +133
+    // // err_i toma valores entre -32k y 32k, por lo que su aporte a diff_potencia esta acotado entre -32 y +32 (-32 y +32 para 6 sensores)
+    // // err_d toma valores entre -5k y 5k, por lo que su aporte a diff_potencia esta acotado entre -inf y +inf (para los niveles de representacion que manejamos). 
+    // // Para un caso normal, en que err_p varie 30 entre una medicion y la siguiente, estará acotado entre -45 y +45
+    
+    // constrain
+    if (reduccionVelocidad < -rangoVelocidad - velocidadFreno) {
+      reduccionVelocidad = -rangoVelocidad - velocidadFreno;
+    } else if (reduccionVelocidad > rangoVelocidad + velocidadFreno) {
+      reduccionVelocidad = rangoVelocidad + velocidadFreno;
+    }
+
+    if (reduccionVelocidad < 0) {
+      direccionMovimientoLateral = haciaIzquierda;
+    } else {
+      direccionMovimientoLateral = haciaDerecha;
+    }
+
+    reduccionVelocidad = abs(reduccionVelocidad);
+    velocidadMotorFrenado = abs(rangoVelocidad - reduccionVelocidad);
+    
+    
+//    apagarMotores();
+    
+    if (direccionMovimientoLateral == haciaIzquierda) {
+      // si la reducción es mayor al rango de velocidad, 
+      // uno de los motores va para atrás
+      if (reduccionVelocidad > rangoVelocidad) {
+        digitalWrite(sentidoMotorI, atras);
+        digitalWrite(sentidoMotorD, adelante);
+        analogWrite(pwmMotorI, 255 - velocidadMotorFrenado);
+        analogWrite(pwmMotorD, rangoVelocidad);
+      } else {
+        digitalWrite(sentidoMotorI, adelante);
+        digitalWrite(sentidoMotorD, adelante);
+        analogWrite(pwmMotorI, velocidadMotorFrenado);
+        analogWrite(pwmMotorD, rangoVelocidad);
+      }
+    } else if (direccionMovimientoLateral == haciaDerecha) {
+      // si la reducción es mayor al rango de velocidad, 
+      // uno de los motores va para atrás
+      if (reduccionVelocidad > rangoVelocidad) {
+        digitalWrite(sentidoMotorI, adelante);
+        digitalWrite(sentidoMotorD, atras);
+        analogWrite(pwmMotorI, rangoVelocidad);
+        analogWrite(pwmMotorD, 255 - velocidadMotorFrenado);
+      } else {
+        digitalWrite(sentidoMotorI, adelante);
+        digitalWrite(sentidoMotorD, adelante);
+        analogWrite(pwmMotorI, rangoVelocidad);
+        analogWrite(pwmMotorD, velocidadMotorFrenado);
+      }
+    }
+    
+    // tiempoUs = (double)micros() / 1000.0 - tiempoUs;
+    if (DEBUG) {
+//      tiempoUs = micros() - ultimoTiempoUs;
+//      debug("%.4i ", tiempoUs);
+       debug("% .4i ", sensoresLinea);
+//      debug("% .4i ", errP);
+//      debug("% .3i\n", reduccionVelocidad);
+
+        debug("%.4d ", sensores[izq]);
+        debug("%.4d ", sensores[cenIzq]);
+        debug("%.4d ", sensores[cen]);
+        debug("%.4d ", sensores[cenDer]);
+        debug("%.4d\n", sensores[der]);
+  
+    }
+    tiempoUs = micros() - ultimoTiempoUs;
+    ultimoTiempoUs = micros();
+
   }
   esperarReboteBoton();
   
@@ -538,3 +575,16 @@ void loop() {
   esperarReboteBoton();
 
 }
+
+inline void frenarMotores() {
+  digitalWrite(led1, HIGH);
+  digitalWrite(sentidoMotorI, atras); 
+  digitalWrite(sentidoMotorD, atras); 
+  analogWrite(pwmMotorI, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
+  analogWrite(pwmMotorD, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
+  delay(DELAY_FRENO_POR_CAMBIO_MODO_CURVA); // ms
+  digitalWrite(sentidoMotorI, adelante); 
+  digitalWrite(sentidoMotorD, adelante); 
+  digitalWrite(led1, LOW);
+}
+
