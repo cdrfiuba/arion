@@ -31,7 +31,7 @@ const int coeficienteErrorDdiv = 1;
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = true; // para debuggear si arranca en modo curva o no
-const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignore el sensorCurva
+const int TOLERANCIA_SENSOR_CURVA = 1024; //450; // más de 1024 hace que se ignore el sensorCurva
 const int DEBOUNCE_MODO_CURVA = 10; // ms
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
@@ -44,7 +44,7 @@ const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 15; // ms
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
-const int tiempoCicloReferencia = 840;
+const int tiempoCicloReferencia = 1120;
 
 // parámetro batería
 // 8.23 V => 847 
@@ -162,7 +162,7 @@ void setup() {
       minimosSensores[i] = 0;
       maximosSensores[i] = 1023;
     }
-    inicializarCalibracionInicial = true;
+    inicializarCalibracionInicial = false;
   }
   
   apagarMotores();  
@@ -233,7 +233,7 @@ void mostrarSensores() {
   debug("%.4d ", sensores[cen]);
   debug("%.4d ", sensores[cenDer]);
   debug("%.4d ", sensores[der]);
-  debug("%.1d\n", sensores[curva]);
+  debug("%.4d\n", sensores[curva]);
 }
 
 void apagarMotores() {
@@ -259,7 +259,7 @@ inline void chequearBateriaBloqueante() {
   if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
     // si la batería está por debajo del mínimo, parpadea LEDs
     // hasta que se apreta el botón
-    while (!apretado(boton1)) {
+    while (!apretado(boton2)) {
       digitalWrite(led1, HIGH);
       digitalWrite(led2, HIGH);
       digitalWrite(led3, HIGH);
@@ -276,7 +276,7 @@ inline void chequearBateriaBloqueante() {
     digitalWrite(led3, LOW);
     
     // hasta que se suelte el botón, espera 
-    while (apretado(boton1));
+    while (apretado(boton2));
     esperarReboteBoton();
   }
 }
@@ -389,6 +389,7 @@ void loop() {
     }
     ultimoEstadoActualAdentro = estadoActualAdentro;
     
+    // 50 microsegundos
     // modo pid
     // linea = (0 * s0 + 1000 * s1 + 2000 * s2 + 3000 * s3 + 4000 * s4) / (s0 + s1 + s2 + s3 + s4)
     sensoresLinea = (
@@ -414,15 +415,16 @@ void loop() {
         sensoresLinea = MAXIMO_SENSORES_LINEA;
       }
     }
-    
-    sensorCurvaActivo = ((sensorCurvaActivo > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
+
+    sensorCurvaActivo = ((sensores[curva] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
     if (sensorCurvaActivo == 1 && sensorCurvaActivo != ultimoValorSensorCurva) {
       if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA){
         // tengo seguridad de que pasó el rebote del sensor
         modoCurva = !modoCurva;
+        
         ultimoTiempoModoCurva = millis();
         // si paso a modo curva, freno porque venia rápido
-        if (modoCurva == false) {
+        if (modoCurva == true) {
           frenarMotores();
         }
       }
@@ -431,14 +433,17 @@ void loop() {
     
     if (modoCurva) {
       rangoVelocidad = rangoVelocidadCurva;
+      digitalWrite(led2, LOW);
     } else {
       rangoVelocidad = rangoVelocidadRecta;
+      digitalWrite(led2, HIGH);
     }
 
     if (estadoActualAdentro == false) {
       rangoVelocidad = 20;
     }
 
+    // 20 microsegundos
     errP = sensoresLinea - centroDeLinea;
     // errI = errP * tiempoCicloReferencia / tiempoUs;
     errD = (errP - errPAnterior) * tiempoUs / tiempoCicloReferencia;
@@ -500,7 +505,7 @@ void loop() {
       tiempoUs = micros() - ultimoTiempoUs;
       debug("%.4i ", tiempoUs);
     }
-    debug("% .4i ", sensoresLinea);
+    debug("%.4i ", sensoresLinea);
 
     debug("%.4d ", sensores[izq]);
     debug("%.4d ", sensores[cenIzq]);
