@@ -17,8 +17,9 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 155; // 200 es estable
-const int rangoVelocidadCurva = 155; // 140 es estable y rápido
+const int rangoVelocidadRecta = 210; // 200 es estable
+const int rangoVelocidadCurva = 140; // 140 es estable y rápido
+const int rangoVelocidadAfuera = 50; 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
 const int velocidadFreno = 20;
 
@@ -30,17 +31,17 @@ const int coeficienteErrorDmult = 19;
 const int coeficienteErrorDdiv = 1;
 
 // parámetros para modo curva
-const bool MODO_CURVA_INICIAL = true; // para debuggear si arranca en modo curva o no
-const int TOLERANCIA_SENSOR_CURVA = 1024; //450; // más de 1024 hace que se ignore el sensorCurva
+const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
+const int TOLERANCIA_SENSOR_CURVA = 450; //450; // más de 1024 hace que se ignore el sensorCurva
 const int DEBOUNCE_MODO_CURVA = 10; // ms
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
-const int MAXIMO_SENSORES_LINEA = 5000;
-const int MINIMO_SENSORES_LINEA = 1000;
+const int MAXIMO_SENSORES_LINEA = 4000;
+const int MINIMO_SENSORES_LINEA = 2000;
 
 // parámetros de frenarMotores
 const int VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA = 255; // 0 apagado, 255 full speed
-const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 15; // ms
+const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 40; // ms
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
@@ -440,7 +441,7 @@ void loop() {
     }
 
     if (estadoActualAdentro == false) {
-      rangoVelocidad = 20;
+      rangoVelocidad = rangoVelocidadAfuera;
     }
 
     // 20 microsegundos
