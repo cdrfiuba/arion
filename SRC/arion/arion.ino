@@ -36,11 +36,9 @@ const bool usarCarrilIzquierdo = false;
 const int velocidadFreno = 20;
 
 // parámetros PID
-const int coeficienteErrorPmult = 1;
-const int coeficienteErrorPdiv = 7;
-const int coeficienteErrorIdiv = 2500;
-const int coeficienteErrorDmult = 19;
-const int coeficienteErrorDdiv = 1;
+const float kP = 1.0 / 7.0;
+const float kD = 19.0;
+const float kI = 1.0 / 2500.0;
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
@@ -57,7 +55,7 @@ const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 40; // ms
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
-const int tiempoCicloReferencia = 560;
+const int tiempoCicloReferencia = 390;
 
 // parámetro batería
 // 8.23 V => 847 
@@ -103,6 +101,7 @@ int sensores[cantidadDeSensores];
  // guarda los valores mínimos y máximos usados al calibrar
 int minimosSensores[cantidadDeSensores];
 int maximosSensores[cantidadDeSensores];
+float coeficientesSensores[cantidadDeSensores];
 
 // indices de array sensores
 const int izq    = 0;
@@ -178,6 +177,7 @@ void setup() {
       sensores[i] = 0;
       minimosSensores[i] = 0;
       maximosSensores[i] = 1023;
+      coeficientesSensores[i] = 1.0;
     }
     inicializarCalibracionInicial = false;
   }
@@ -206,19 +206,15 @@ inline void obtenerSensores() {
 }
 
 inline void obtenerSensoresCalibrados() {
-  // sólo calibrar lleva 270us
-  long denominador = 0;
-  long numerador = 0;
-  long valor = 0;
+  int valor = 0;
   obtenerSensores();
   for (int i = 0; i < cantidadDeSensores; i++) {
-    denominador = maximosSensores[i] - minimosSensores[i];
-    numerador = sensores[i] - minimosSensores[i];
-    valor = numerador * 1023L / denominador;
-    if (valor > 1023L) {
-      valor = 1023L;
-    } else if (valor < 0L) {
-      valor = 0L;
+    valor = (sensores[i] - minimosSensores[i]);
+    valor = valor * coeficientesSensores[i];
+    if (valor > 1023) {
+      valor = 1023;
+    } else if (valor < 0) {
+      valor = 0;
     }
     sensores[i] = (int)valor;
   }
@@ -234,6 +230,7 @@ void calibrarSensores() {
     if (sensores[i] > maximosSensores[i]) {
       maximosSensores[i] = sensores[i];
     }
+    coeficientesSensores[i] = 1023.0 / (float)(maximosSensores[i] - minimosSensores[i]);
   }
 }
 
@@ -303,10 +300,10 @@ inline void chequearBateriaBloqueante() {
 
 void loop() {
   // definición de variables locales
-  int errP = 0;
-  int errPAnterior = 0;
-  //int errI = 0;
-  int errD = 0;
+  float errP = 0;
+  float errPAnterior = 0;
+  //float errI = 0;
+  float errD = 0;
   int rangoVelocidad;
   int reduccionVelocidad;
   int velocidadMotorFrenado;
@@ -495,12 +492,12 @@ void loop() {
 
     // 20 microsegundos
     errP = sensoresLinea - centroDeLinea;
-    // errI = errP * tiempoCicloReferencia / tiempoUs;
+    // errI += errP * tiempoCicloReferencia / tiempoUs;
     errD = (errP - errPAnterior) * tiempoUs / tiempoCicloReferencia;
     errPAnterior = errP;
-    // reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv + errI / coeficienteErrorIdiv;
-    reduccionVelocidad = (errP * coeficienteErrorPmult) / coeficienteErrorPdiv  + (errD * coeficienteErrorDmult) / coeficienteErrorDdiv;
-    
+    // reduccionVelocidad = errP * kP + errD * kD + errI * kI;
+    reduccionVelocidad = errP * kP + errD * kD;
+
     // constrain
     if (reduccionVelocidad < -rangoVelocidad - velocidadFreno) {
       reduccionVelocidad = -rangoVelocidad - velocidadFreno;
