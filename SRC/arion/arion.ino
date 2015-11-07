@@ -17,9 +17,12 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 180; // 200 es estable
-const int rangoVelocidadCurva = 100; // 140 es estable y rápido
+const int rangoVelocidadRecta = 240; // 200 es estable
+const int rangoVelocidadCurva = 180; // 140 es estable y rápido
 const int rangoVelocidadAfuera = 50; 
+
+// velocidad permitida en reversa al aplicar reduccionVelocidad en PID
+const int velocidadFreno = 40;
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
 const bool usarVelocidadPorTramo = false;
@@ -32,12 +35,9 @@ const int velocidadesRectaCD[cantidadDeRectas] = {R+00, R+00, R+00, R+00, R+00, 
 const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00, C+00, C+00, C+00, C+00, C+00};
 const bool usarCarrilIzquierdo = false;
 
-// velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFreno = 20;
-
 // parámetros PID
 const float kP = 1.0 / 7.0;
-const float kD = 19.0;
+const float kD = 35.0;
 const float kI = 1.0 / 2500.0;
 
 // parámetros para modo curva
@@ -412,7 +412,7 @@ void loop() {
         estadoActualAdentro = false;
         digitalWrite(led3, HIGH);
         if (estadoActualAdentro != ultimoEstadoActualAdentro) {
-          frenarMotores();
+          //frenarMotores();
         }
       } else {
         digitalWrite(led3, LOW);
@@ -551,7 +551,9 @@ void loop() {
       // Usado para medir tiempoCicloReferencia.
       tiempoUs = micros() - ultimoTiempoUs;
       debug("%.4i ", tiempoUs);
-      debug("%.4i\n", sensoresLinea);
+      debug("% .5i ", (int)errP);
+      debug("% .5i ", (int)errD);
+      debug("%.4i\n", reduccionVelocidad);
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
