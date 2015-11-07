@@ -17,28 +17,35 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 240; // 200 es estable
-const int rangoVelocidadCurva = 180; // 140 es estable y rápido
-const int rangoVelocidadAfuera = 50; 
+const int rangoVelocidadRecta = 255; // velocidad real = rango - freno / 2
+const int rangoVelocidadCurva = 210; // 
+const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFreno = 40;
+const int velocidadFrenoRecta = 0;
+const int velocidadFrenoCurva = 40;
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
+// y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
+// (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
+// en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
+// se cae inmeditamente después de terminar esa recta)
+const int cantidadDeRectas = 4; // asume que empieza en recta
+
+const bool usarTiemposPorRecta = true;
+const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {600, 0, 600, 0};
+
 const bool usarVelocidadPorTramo = false;
-const int cantidadDeRectas = 9; // asume que empieza en recta
+const bool usarCarrilIzquierdo = false;
 const int R = rangoVelocidadRecta;
 const int C = rangoVelocidadCurva;
-const int velocidadesRectaCI[cantidadDeRectas] = {R+00, R+00, R+00, R+00, R+00, R+00, R+00, R+00, 255};
-const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00, C+00, C+00, C+00, C+00, C+00};
-const int velocidadesRectaCD[cantidadDeRectas] = {R+00, R+00, R+00, R+00, R+00, R+00, R+00, R+00, 255};
-const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00, C+00, C+00, C+00, C+00, C+00};
-const bool usarCarrilIzquierdo = false;
+const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
+const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
 
 // parámetros PID
 const float kP = 1.0 / 7.0;
 const float kD = 35.0;
-const float kI = 1.0 / 2500.0;
+//const float kI = 1.0 / 2500.0;
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
@@ -61,7 +68,7 @@ const int tiempoCicloReferencia = 390;
 // 8.23 V => 847 
 // 8.00 V => 822
 // 7.50 V  => 771 
-const int MINIMO_VALOR_BATERIA = 771;
+const int MINIMO_VALOR_BATERIA = 760;
 
 // parámetros para promedio ponderado de sensoresLinea
 const int COEFICIENTE_SENSOR_IZQ     = 0;
@@ -182,7 +189,11 @@ void setup() {
     inicializarCalibracionInicial = false;
   }
   
-  apagarMotores();  
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
+  digitalWrite(led3, LOW);
+  digitalWrite(ledArduino, LOW);
+  apagarMotores();
   
 }
 
@@ -305,6 +316,7 @@ void loop() {
   //float errI = 0;
   float errD = 0;
   int rangoVelocidad;
+  int velocidadFreno;
   int reduccionVelocidad;
   int velocidadMotorFrenado;
   int direccionMovimientoLateral;
@@ -320,9 +332,9 @@ void loop() {
   int tiempoUs = tiempoCicloReferencia; // no debe ser 0, pues se usa para dividir
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
   unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
+  unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
   int contadorRecta = 0;
-  int velocidadesCurvaPorTramo[cantidadDeRectas];
-  int velocidadesRectaPorTramo[cantidadDeRectas];
+  int velocidadesCurvaPorTramo[cantidadDeRectas];  
   
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
@@ -330,12 +342,10 @@ void loop() {
     if (usarCarrilIzquierdo) {
       for (int i = 0; i < cantidadDeRectas; i++) {
         velocidadesCurvaPorTramo[i] = velocidadesCurvaCI[i];
-        velocidadesRectaPorTramo[i] = velocidadesRectaCI[i];
       }
     } else {
       for (int i = 0; i < cantidadDeRectas; i++) {
         velocidadesCurvaPorTramo[i] = velocidadesCurvaCD[i];
-        velocidadesRectaPorTramo[i] = velocidadesRectaCD[i];
       }
     }
   }
@@ -373,6 +383,7 @@ void loop() {
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
   digitalWrite(led3, LOW);
+  digitalWrite(ledArduino, LOW);
   
   // hasta que se suelte el botón, espera 
   while (apretado(boton1));
@@ -392,6 +403,8 @@ void loop() {
     delay(10);
   }
 
+  ultimoTiempoRecta = millis();
+  
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
     //chequearBateria();
@@ -463,6 +476,7 @@ void loop() {
         if (modoCurva == true) {
           frenarMotores();
         } else {
+          ultimoTiempoRecta = millis();
           contadorRecta++;
           if (contadorRecta == cantidadDeRectas) {
             contadorRecta = 0;
@@ -474,14 +488,22 @@ void loop() {
 
     if (modoCurva) {
       rangoVelocidad = rangoVelocidadCurva;
+      velocidadFreno = velocidadFrenoCurva;
       if (usarVelocidadPorTramo) {
         rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
       }
       digitalWrite(led2, LOW);
+      digitalWrite(ledArduino, LOW);
     } else {
       rangoVelocidad = rangoVelocidadRecta;
-      if (usarVelocidadPorTramo) {
-        rangoVelocidad = velocidadesRectaPorTramo[contadorRecta];
+      velocidadFreno = velocidadFrenoRecta;
+      if (usarTiemposPorRecta) {
+        if (millis() - ultimoTiempoRecta > tiempoAMaxVelocidadRecta[contadorRecta]) {
+          rangoVelocidad = rangoVelocidadCurva;
+          digitalWrite(ledArduino, HIGH);
+        } else {
+          digitalWrite(ledArduino, LOW);
+        }
       }
       digitalWrite(led2, HIGH);
     }
