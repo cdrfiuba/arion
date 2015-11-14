@@ -17,8 +17,8 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 255; // velocidad real = rango - freno / 2
-const int rangoVelocidadCurva = 210; // 
+const int rangoVelocidadRecta = 160; // velocidad real = rango - freno / 2
+const int rangoVelocidadCurva = 160; // 
 const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
@@ -30,10 +30,13 @@ const int velocidadFrenoCurva = 40;
 // (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
 // en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
 // se cae inmeditamente después de terminar esa recta)
-const int cantidadDeRectas = 4; // asume que empieza en recta
+const int cantidadDeRectas = 9; // asume que empieza en recta
 
-const bool usarTiemposPorRecta = true;
-const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {600, 0, 600, 0};
+const bool usarTiemposPorRecta = false;
+// Vector de distancias {50, 30, 300, 50, 100, 150, 120, 200, 10000};
+//Vector de distancias invertidas = {50, 200, 120, 150, 100, 50, 300, 30, 10000};
+const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 500, 600, 500, 1000, 100000};
+//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 1000, 500, 600, 500, 0, 2000, 0, 100000};
 
 const bool usarVelocidadPorTramo = false;
 const bool usarCarrilIzquierdo = false;
@@ -62,13 +65,18 @@ const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 40; // ms
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
-const int tiempoCicloReferencia = 390;
+const int tiempoCicloReferencia = 1040;//390;
 
 // parámetro batería
-// 8.23 V => 847 
+// 8.23 V => 847
 // 8.00 V => 822
-// 7.50 V  => 771 
+// 8.27 V => 848
+// 7.71 v => 791
+// 7.50 V => 771 // armado con regla de 3
 const int MINIMO_VALOR_BATERIA = 760;
+const bool usarTensionCompensadaBateria = false;
+const int MAXIMO_VALOR_BATERIA = 859;// = 8.4V / 2 (divisor resitivo) * 1023.0 / 5V
+
 
 // parámetros para promedio ponderado de sensoresLinea
 const int COEFICIENTE_SENSOR_IZQ     = 0;
@@ -175,9 +183,9 @@ void setup() {
 
   // pone el prescaler del ADC Clock en 16
   // esto reduce el tiempo de cada conversión AD de ~112us a ~20us
-  setBit(ADCSRA, ADPS2) ;
-  clearBit(ADCSRA, ADPS1) ;
-  clearBit(ADCSRA, ADPS0) ;
+  //setBit(ADCSRA, ADPS2);
+  //clearBit(ADCSRA, ADPS1);
+  //clearBit(ADCSRA, ADPS0);
 
   if (inicializarCalibracionInicial) {
     for (int i = 0; i < cantidadDeSensores; i++) {
@@ -334,7 +342,8 @@ void loop() {
   unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
   int contadorRecta = 0;
-  int velocidadesCurvaPorTramo[cantidadDeRectas];  
+  int velocidadesCurvaPorTramo[cantidadDeRectas];
+  float coeficienteBateria;
   
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
@@ -403,7 +412,16 @@ void loop() {
     delay(10);
   }
 
+  // calculo el coeficiente de la batería según la carga que tenga ahora
+  if (usarTensionCompensadaBateria) {
+    coeficienteBateria = MAXIMO_VALOR_BATERIA / analogRead(batteryControl);
+  } else {
+    coeficienteBateria = 1.0;
+  }
+  
+  // inicializacion tiempos
   ultimoTiempoRecta = millis();
+  ultimoTiempoUs = micros();
   
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
@@ -512,6 +530,16 @@ void loop() {
       rangoVelocidad = rangoVelocidadAfuera;
     }
 
+    // aplico el coeficiente de compensacion de tensión de la batería
+    rangoVelocidad = rangoVelocidad * coeficienteBateria;
+    velocidadFreno = velocidadFreno * coeficienteBateria;
+    if (rangoVelocidad > 255) {
+      rangoVelocidad = 255;
+    }
+    if (velocidadFreno > 255) {
+      velocidadFreno = 255;
+    }
+
     // 20 microsegundos
     errP = sensoresLinea - centroDeLinea;
     // errI += errP * tiempoCicloReferencia / tiempoUs;
@@ -579,6 +607,11 @@ void loop() {
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
+    
+    while (tiempoUs < tiempoCicloReferencia) {
+      tiempoUs = micros() - ultimoTiempoUs;
+    }
+
     ultimoTiempoUs = micros();
 
   }
