@@ -1,10 +1,23 @@
-// nada marron nada blanco rojo nada
+// nada marron nada blanco rojo nada  EEE                      89
 //              micro
 
 
 // nada nada blanco rojo marron
 //            usb
 
+// tiempos de referencia Bahía Blanca 2015
+// curva 160, recta 160, sin velocidad por tramo: 18.66
+// curva 160, recta 255, con velocidad por tramo: 15.76
+  // velocidades por tramo = {0, 0, 2000, 0, 500, 600, 500, 1000, 65500}; // no anda para uno de los carriles
+  
+
+
+// curva 160, recta 255, con velocidad por tramo: 16.09
+  // tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 700, 65500}; // anda en ambos carriles
+
+
+// para el año que viene: competir con algún Arión en Libre
+// 
 
 /** inicio de parámetros configurables **/
 
@@ -17,8 +30,8 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 160; // velocidad real = rango - freno / 2
-const int rangoVelocidadCurva = 160; // 
+const int rangoVelocidadRecta = 255; // velocidad real = rango - freno / 2
+const int rangoVelocidadCurva = 150; // 
 const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
@@ -30,13 +43,26 @@ const int velocidadFrenoCurva = 40;
 // (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
 // en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
 // se cae inmeditamente después de terminar esa recta)
-const int cantidadDeRectas = 9; // asume que empieza en recta
+const int cantidadDeRectas = 25; // asume que empieza en recta
 
-const bool usarTiemposPorRecta = false;
-// Vector de distancias {50, 30, 300, 50, 100, 150, 120, 200, 10000};
-//Vector de distancias invertidas = {50, 200, 120, 150, 100, 50, 300, 30, 10000};
-const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 500, 600, 500, 1000, 100000};
-//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 1000, 500, 600, 500, 0, 2000, 0, 100000};
+const bool usarTiemposPorRecta = true;
+// Vector de distancias {500, 300, 4500, 750, 1000, 2000, 1500, 2500, 10000};
+//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 600, 65500}; // andan!
+
+// distancias por tramo pista grande = {0,       0, 4000, 0, 3000, 4000, 0, 4000, 0, 1500, 2500, 2500, 1500  } 
+//REPITE DESDE DODNE ESTA SEPARADO
+
+const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 
+  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 0, /* 1 vuelta */
+  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 65000 /* 1 vuelta */
+};
+//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, // seguro
+//  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
+//  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
+//};
+
+
+// espejada //const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 1000, 500, 600, 500, 0, 2000, 0, 65500};
 
 const bool usarVelocidadPorTramo = false;
 const bool usarCarrilIzquierdo = false;
@@ -441,18 +467,18 @@ void loop() {
       if ( ((sensores[izq]  < tolerancia) && (sensores[der] < toleranciaBorde) ) ||
            ((sensores[izq]  < toleranciaBorde) && (sensores[der] < tolerancia) ) ) {
         estadoActualAdentro = false;
-        digitalWrite(led3, HIGH);
+        //digitalWrite(led3, HIGH);
         if (estadoActualAdentro != ultimoEstadoActualAdentro) {
           //frenarMotores();
         }
       } else {
-        digitalWrite(led3, LOW);
+        //digitalWrite(led3, LOW);
         estadoActualAdentro = true;
       }
       
     } else {
       estadoActualAdentro = true;
-      digitalWrite(led3, LOW);
+      //digitalWrite(led3, LOW);
     }
     ultimoEstadoActualAdentro = estadoActualAdentro;
     
@@ -511,16 +537,16 @@ void loop() {
         rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
       }
       digitalWrite(led2, LOW);
-      digitalWrite(ledArduino, LOW);
+      digitalWrite(led3, LOW);
     } else {
       rangoVelocidad = rangoVelocidadRecta;
       velocidadFreno = velocidadFrenoRecta;
       if (usarTiemposPorRecta) {
         if (millis() - ultimoTiempoRecta > tiempoAMaxVelocidadRecta[contadorRecta]) {
           rangoVelocidad = rangoVelocidadCurva;
-          digitalWrite(ledArduino, HIGH);
+          digitalWrite(led3, HIGH);
         } else {
-          digitalWrite(ledArduino, LOW);
+          digitalWrite(led3, LOW);
         }
       }
       digitalWrite(led2, HIGH);
