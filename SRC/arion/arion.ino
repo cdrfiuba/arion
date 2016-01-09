@@ -1,24 +1,3 @@
-// nada marron nada blanco rojo nada  EEE                      89
-//              micro
-
-
-// nada nada blanco rojo marron
-//            usb
-
-// tiempos de referencia Bahía Blanca 2015
-// curva 160, recta 160, sin velocidad por tramo: 18.66
-// curva 160, recta 255, con velocidad por tramo: 15.76
-  // velocidades por tramo = {0, 0, 2000, 0, 500, 600, 500, 1000, 65500}; // no anda para uno de los carriles
-  
-
-
-// curva 160, recta 255, con velocidad por tramo: 16.09
-  // tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 700, 65500}; // anda en ambos carriles
-
-
-// para el año que viene: competir con algún Arión en Libre
-// 
-
 /** inicio de parámetros configurables **/
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
@@ -29,69 +8,25 @@ const bool DEBUG = false;
 const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
-// parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 255; // velocidad real = rango - freno / 2
-const int rangoVelocidadCurva = 150; // 
+// parámetros de velocidades máximas
+const int rangoVelocidad = 255;
 const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFrenoRecta = 0;
-const int velocidadFrenoCurva = 40;
-
-// parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
-// y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
-// (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
-// en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
-// se cae inmeditamente después de terminar esa recta)
-const int cantidadDeRectas = 25; // asume que empieza en recta
-
-const bool usarTiemposPorRecta = true;
-// Vector de distancias {500, 300, 4500, 750, 1000, 2000, 1500, 2500, 10000};
-//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 600, 65500}; // andan!
-
-// distancias por tramo pista grande = {0,       0, 4000, 0, 3000, 4000, 0, 4000, 0, 1500, 2500, 2500, 1500  } 
-//REPITE DESDE DODNE ESTA SEPARADO
-
-const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 
-  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 0, /* 1 vuelta */
-  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 65000 /* 1 vuelta */
-};
-//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, // seguro
-//  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
-//  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
-//};
-
-
-// espejada //const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 1000, 500, 600, 500, 0, 2000, 0, 65500};
-
-const bool usarVelocidadPorTramo = false;
-const bool usarCarrilIzquierdo = false;
-const int R = rangoVelocidadRecta;
-const int C = rangoVelocidadCurva;
-const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
-const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
+const int velocidadFreno = 0;
 
 // parámetros PID
 const float kP = 1.0 / 7.0;
 const float kD = 35.0;
 //const float kI = 1.0 / 2500.0;
 
-// parámetros para modo curva
-const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
-const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignore el sensorCurva
-const int DEBOUNCE_MODO_CURVA = 10; // ms
-
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
 const int MAXIMO_SENSORES_LINEA = 4000;
 const int MINIMO_SENSORES_LINEA = 2000;
 
-// parámetros de frenarMotores
-const int VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA = 255; // 0 apagado, 255 full speed
-const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 40; // ms
-
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
-const int tiempoCicloReferencia = 1040;//390;
+const int tiempoCicloReferencia = 1040;
 
 // parámetro batería
 // 8.23 V => 847
@@ -134,10 +69,9 @@ const int sensor2 = A2;
 const int sensor3 = A3;
 const int sensor4 = A5;
 const int batteryControl = A4;
-const int sensorCurva = A6;
 
 // armado de array de sensores y arrays para calibración
-const int cantidadDeSensores = 6;
+const int cantidadDeSensores = 5;
 int sensores[cantidadDeSensores];
  // guarda los valores mínimos y máximos usados al calibrar
 int minimosSensores[cantidadDeSensores];
@@ -150,7 +84,6 @@ const int cenIzq = 1;
 const int cen    = 2;
 const int cenDer = 3;
 const int der    = 4;
-const int curva  = 5;
 
 // control para inicializar la calibración de los sensores 
 // sólo cuando se prende el robot
@@ -194,7 +127,6 @@ void setup() {
   //pinMode(sensor3, INPUT);
   //pinMode(sensor4, INPUT);
   //pinMode(batteryControl, INPUT);
-  pinMode(sensorCurva, INPUT);
   
   pinMode(ledArduino, OUTPUT);
   pinMode(led1, OUTPUT);  
@@ -247,7 +179,6 @@ inline void obtenerSensores() {
   sensores[cen]    = 1024 - analogRead(sensor2);
   sensores[cenDer] = 1024 - analogRead(sensor3);
   sensores[der]    = 1024 - analogRead(sensor4);
-  sensores[curva]  = 1024 - analogRead(sensorCurva);
 }
 
 inline void obtenerSensoresCalibrados() {
@@ -294,8 +225,7 @@ void mostrarSensores() {
   debug("%.4d ", sensores[cenIzq]);
   debug("%.4d ", sensores[cen]);
   debug("%.4d ", sensores[cenDer]);
-  debug("%.4d ", sensores[der]);
-  debug("%.4d\n", sensores[curva]);
+  debug("%.4d\n", sensores[der]);
 }
 
 void apagarMotores() {
@@ -508,27 +438,6 @@ void loop() {
         sensoresLinea = MAXIMO_SENSORES_LINEA;
       }
     }
-
-    sensorCurvaActivo = ((sensores[curva] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
-    if (sensorCurvaActivo == 1 && sensorCurvaActivo != ultimoValorSensorCurva) {
-      if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA){
-        // tengo seguridad de que pasó el rebote del sensor
-        modoCurva = !modoCurva;
-        
-        ultimoTiempoModoCurva = millis();
-        // si paso a modo curva, freno porque venia rápido
-        if (modoCurva == true) {
-          frenarMotores();
-        } else {
-          ultimoTiempoRecta = millis();
-          contadorRecta++;
-          if (contadorRecta == cantidadDeRectas) {
-            contadorRecta = 0;
-          }
-        }
-      }
-    }
-    ultimoValorSensorCurva = sensorCurvaActivo;
 
     if (modoCurva) {
       rangoVelocidad = rangoVelocidadCurva;
