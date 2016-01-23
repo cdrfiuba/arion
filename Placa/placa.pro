@@ -1,4 +1,4 @@
-update=Fri 12 Jun 2015 10:25:58 PM ART
+update=vie 22 ene 2016 21:31:04 ART
 version=1
 last_client=kicad
 [pcbnew]
@@ -23,6 +23,8 @@ ModuleOutlineThickness=0.150000000000
 [cvpcb]
 version=1
 NetIExt=net
+[general]
+version=1
 [eeschema]
 version=1
 LibDir=
@@ -57,6 +59,3 @@ LibName27=atmel
 LibName28=contrib
 LibName29=valves
 LibName30=Bibliotecas/tcrt1000
-LibName31=Bibliotecas/ArduProMiniTKB
-[general]
-version=1
