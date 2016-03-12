@@ -1,4 +1,4 @@
-update=vie 22 ene 2016 21:31:04 ART
+update=vie 11 mar 2016 21:29:43 ART
 version=1
 last_client=kicad
 [pcbnew]
@@ -59,3 +59,5 @@ LibName27=atmel
 LibName28=contrib
 LibName29=valves
 LibName30=Bibliotecas/tcrt1000
+LibName31=Bibliotecas/reg_204-5
+LibName32=Bibliotecas/DVR8833
