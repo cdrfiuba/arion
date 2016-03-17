@@ -27,7 +27,7 @@ difference() {
     }
 
     // pieza móvil del centro
-    //translate([diametro_exterior, 0, -espesor_piso]) // esto saca la pieza de adentro de la otra
+    translate([diametro_exterior, 0, -espesor_piso]) // esto saca la pieza de adentro de la otra
     translate([0, 0, espesor_piso]) // pone la pieza central justo arriba de la otra
     difference() {
       // pieza central para determinar el espesor de la rueda
@@ -38,6 +38,8 @@ difference() {
       color("SkyBlue") cylinder(h=ancho, r=(radio_tornillo));
     }
   }
-  // corte transversal
-  //color("LightYellow") cube([150, 30, 50]);
+  // corte transversal:
+  // primero hay que deshacer el translate, y luego aplicar un cubo de diferencia
+  //translate([-(radio_rueda + espesor_pared_exterior), -(radio_rueda + espesor_pared_exterior), 0])
+  //  color("LightYellow") cube([diametro_exterior * 2, radio_rueda + espesor_pared_exterior, ancho + espesor_piso]);
 }
