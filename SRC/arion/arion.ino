@@ -279,8 +279,6 @@ void loop() {
   float errPAnterior = 0;
   //float errI = 0;
   float errD = 0;
-  int rangoVelocidad;
-  int velocidadFreno;
   int reduccionVelocidad;
   int velocidadMotorFrenado;
   int direccionMovimientoLateral;
@@ -291,30 +289,16 @@ void loop() {
   int ultimoValorSensorCurva = 0;
   bool calibracionReseteada = false;
   int ultimoBorde = izquierda;
-  bool modoCurva = MODO_CURVA_INICIAL;
+//  bool modoCurva = MODO_CURVA_INICIAL;
   // para calcular tiempo entre ciclos de PID.
   int tiempoUs = tiempoCicloReferencia; // no debe ser 0, pues se usa para dividir
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
   unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
   int contadorRecta = 0;
-  int velocidadesCurvaPorTramo[cantidadDeRectas];
+//  int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
   
-  // si fue seleccionado el modo usarVelocidadPorTramo,
-  // precargo la data del carril seleccionado
-  if (usarVelocidadPorTramo) {
-    if (usarCarrilIzquierdo) {
-      for (int i = 0; i < cantidadDeRectas; i++) {
-        velocidadesCurvaPorTramo[i] = velocidadesCurvaCI[i];
-      }
-    } else {
-      for (int i = 0; i < cantidadDeRectas; i++) {
-        velocidadesCurvaPorTramo[i] = velocidadesCurvaCD[i];
-      }
-    }
-  }
-
   // inicialización de todas las cosas
   setup();
 
@@ -353,13 +337,6 @@ void loop() {
   // hasta que se suelte el botón, espera 
   while (apretado(boton1));
   esperarReboteBoton();
-
-  // seteo de rangoVelocidad para arranque gradual
-  if (modoCurva) {
-    rangoVelocidad = rangoVelocidadCurva;
-  } else {
-    rangoVelocidad = rangoVelocidadRecta;
-  }
 
   // arranque gradual
   for (int i = 0; i < rangoVelocidad / 10; i++) {
@@ -437,42 +414,6 @@ void loop() {
       } else {
         sensoresLinea = MAXIMO_SENSORES_LINEA;
       }
-    }
-
-    if (modoCurva) {
-      rangoVelocidad = rangoVelocidadCurva;
-      velocidadFreno = velocidadFrenoCurva;
-      if (usarVelocidadPorTramo) {
-        rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
-      }
-      digitalWrite(led2, LOW);
-      digitalWrite(led3, LOW);
-    } else {
-      rangoVelocidad = rangoVelocidadRecta;
-      velocidadFreno = velocidadFrenoRecta;
-      if (usarTiemposPorRecta) {
-        if (millis() - ultimoTiempoRecta > tiempoAMaxVelocidadRecta[contadorRecta]) {
-          rangoVelocidad = rangoVelocidadCurva;
-          digitalWrite(led3, HIGH);
-        } else {
-          digitalWrite(led3, LOW);
-        }
-      }
-      digitalWrite(led2, HIGH);
-    }
-    
-    if (estadoActualAdentro == false) {
-      rangoVelocidad = rangoVelocidadAfuera;
-    }
-
-    // aplico el coeficiente de compensacion de tensión de la batería
-    rangoVelocidad = rangoVelocidad * coeficienteBateria;
-    velocidadFreno = velocidadFreno * coeficienteBateria;
-    if (rangoVelocidad > 255) {
-      rangoVelocidad = 255;
-    }
-    if (velocidadFreno > 255) {
-      velocidadFreno = 255;
     }
 
     // 20 microsegundos
@@ -562,23 +503,4 @@ void loop() {
 
 }
 
-inline void frenarMotores() {
-  digitalWrite(led1, HIGH);
-  
-  // pone los motores para atrás a la velocidad del parámetro y espera
-  digitalWrite(sentidoMotorI, atras); 
-  digitalWrite(sentidoMotorD, atras); 
-  analogWrite(pwmMotorI, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
-  analogWrite(pwmMotorD, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
-
-  delay(DELAY_FRENO_POR_CAMBIO_MODO_CURVA); // ms
-
-  // pone los motores para adelante, frenados
-  digitalWrite(sentidoMotorI, adelante); 
-  digitalWrite(sentidoMotorD, adelante); 
-  analogWrite(pwmMotorI, 0);
-  analogWrite(pwmMotorD, 0);
-  
-  digitalWrite(led1, LOW);
-}
 
