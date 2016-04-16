@@ -9,11 +9,11 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas
-const int rangoVelocidad = 255;
+const int rangoVelocidadAdentro = 255;
 const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFreno = 0;
+const int velocidadFrenoAdentro = 0;
 
 // parámetros PID
 const float kP = 1.0 / 7.0;
@@ -279,24 +279,19 @@ void loop() {
   float errPAnterior = 0;
   //float errI = 0;
   float errD = 0;
+  int rangoVelocidad = rangoVelocidadAdentro;
+  int velocidadFreno = velocidadFrenoAdentro;
   int reduccionVelocidad;
   int velocidadMotorFrenado;
   int direccionMovimientoLateral;
   int sensoresLinea = 0;
   bool estadoActualAdentro = true; 
   bool ultimoEstadoActualAdentro = true;
-  int sensorCurvaActivo;
-  int ultimoValorSensorCurva = 0;
   bool calibracionReseteada = false;
   int ultimoBorde = izquierda;
-//  bool modoCurva = MODO_CURVA_INICIAL;
   // para calcular tiempo entre ciclos de PID.
   int tiempoUs = tiempoCicloReferencia; // no debe ser 0, pues se usa para dividir
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
-  unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
-  unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
-  int contadorRecta = 0;
-//  int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
   
   // inicialización de todas las cosas
@@ -353,7 +348,6 @@ void loop() {
   }
   
   // inicializacion tiempos
-  ultimoTiempoRecta = millis();
   ultimoTiempoUs = micros();
   
   // ejecuta el ciclo principal hasta que se presione el botón
@@ -415,7 +409,17 @@ void loop() {
         sensoresLinea = MAXIMO_SENSORES_LINEA;
       }
     }
-
+    
+    // aplico el coeficiente de compensacion de tensión de la batería
+    rangoVelocidad = rangoVelocidad * coeficienteBateria;
+    velocidadFreno = velocidadFreno * coeficienteBateria;
+    if (rangoVelocidad > 255) {
+      rangoVelocidad = 255;
+    }
+    if (velocidadFreno > 255) {
+      velocidadFreno = 255;
+    }
+    
     // 20 microsegundos
     errP = sensoresLinea - centroDeLinea;
     // errI += errP * tiempoCicloReferencia / tiempoUs;
