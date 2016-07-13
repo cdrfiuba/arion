@@ -370,10 +370,10 @@ Wire Wire Line
 Connection ~ 10700 5350
 Text Label 4100 4450 2    60   ~ 0
 Boton1
-Text Label 4100 5050 2    60   ~ 0
+Text Label 4350 6750 2    60   ~ 0
 Boton2
-Text Label 4100 5150 2    60   ~ 0
-Boton3
+Text Label 4500 6150 2    60   ~ 0
+BotonExtra
 Text Label 1200 5800 0    60   ~ 0
 BatteryControl
 Wire Wire Line
@@ -564,7 +564,7 @@ Wire Wire Line
 	7650 1900 8200 1900
 Text Label 8200 1900 2    60   ~ 0
 Habilitador2
-Text Label 4350 6750 2    60   ~ 0
+Text Label 5550 6100 2    60   ~ 0
 Habilitador2
 Text Label 4300 6450 2    60   ~ 0
 Habilitador1
@@ -576,16 +576,16 @@ Text Label 8550 4200 0    60   ~ 0
 M2OUT1
 Text Label 8550 4300 0    60   ~ 0
 M2OUT2
-Text Label 4050 4550 2    60   ~ 0
-M2IN1
-Text Label 4050 4650 2    60   ~ 0
+Text Label 4300 4550 2    60   ~ 0
+M2IN1(PWM)
+Text Label 4050 6650 2    60   ~ 0
 M2IN2
 Text Label 8550 3600 0    60   ~ 0
 M1OUT1
 Text Label 8550 3700 0    60   ~ 0
 M1OUT2
-Text Label 4050 6650 2    60   ~ 0
-M1IN1
+Text Label 4300 4650 2    60   ~ 0
+M1IN1(PWM)
 Text Label 4050 6550 2    60   ~ 0
 M1IN2
 $Comp
@@ -633,9 +633,9 @@ Wire Wire Line
 Wire Wire Line
 	4100 5150 3750 5150
 Wire Wire Line
-	4100 6250 3750 6250
+	3750 6250 4500 6250
 Wire Wire Line
-	4100 6350 3750 6350
+	3750 6350 4500 6350
 $Comp
 L CONN_01X04 P1
 U 1 1 572D968E
@@ -688,11 +688,11 @@ RX
 Text Label 3900 6150 2    60   ~ 0
 TX
 Wire Wire Line
-	3900 6150 3750 6150
+	3750 6150 4500 6150
 Text Label 3900 6050 2    60   ~ 0
 RX
 Wire Wire Line
-	3900 6050 3750 6050
+	3750 6050 4500 6050
 $Comp
 L +5V #PWR17
 U 1 1 572DCE70
@@ -928,12 +928,12 @@ Text Label 4000 4950 2    60   ~ 0
 Led3
 Wire Wire Line
 	4350 6750 3750 6750
-Text Label 4000 5800 2    60   ~ 0
+Text Label 5650 6300 2    60   ~ 0
 Led4
 Wire Wire Line
 	1500 5900 1850 5900
 Wire Wire Line
-	4000 5800 3750 5800
+	3750 5800 4150 5800
 $Comp
 L CONN_02X03 P12
 U 1 1 57365B2B
@@ -1019,4 +1019,14 @@ Wire Notes Line
 	7650 4350 7650 3150
 Wire Notes Line
 	7650 3150 6250 3150
+Text Label 4100 5050 2    60   ~ 0
+XTAL1
+Text Label 4100 5150 2    60   ~ 0
+XTAL2
+Text Label 4500 6350 2    60   ~ 0
+EncoderM2
+Text Label 4500 6250 2    60   ~ 0
+EncoderM1
+Text Label 4150 5800 2    60   ~ 0
+Sensor7
 $EndSCHEMATC
