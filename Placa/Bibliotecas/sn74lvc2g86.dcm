@@ -1,0 +1,8 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP sn74lvc2g86
+D Dual 2 input XOR
+K TTL XOR2
+$ENDCMP
+#
+#End Doc Library
