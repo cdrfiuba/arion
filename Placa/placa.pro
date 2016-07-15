@@ -1,4 +1,4 @@
-update=vie 13 may 2016 22:18:16 ART
+update=Fri 15 Jul 2016 05:54:03 PM ART
 version=1
 last_client=kicad
 [pcbnew]
@@ -23,6 +23,8 @@ ModuleOutlineThickness=0.150000000000
 [cvpcb]
 version=1
 NetIExt=net
+[general]
+version=1
 [eeschema]
 version=1
 LibDir=
@@ -59,5 +61,4 @@ LibName29=valves
 LibName30=Bibliotecas/tcrt1000
 LibName31=Bibliotecas/reg_204-5
 LibName32=Bibliotecas/DVR8833
-[general]
-version=1
+LibName33=Bibliotecas/sn74lvc2g86
