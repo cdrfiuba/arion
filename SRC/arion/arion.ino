@@ -1,7 +1,7 @@
 /** inicio de parámetros configurables **/
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
-const bool DEBUG = false;
+const bool DEBUG = true;
 
 // parámetros para estadoActualAdentro,
 // determina si se debe clampear los valores de sensoresLinea en el PID
@@ -9,15 +9,14 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas
-const int rangoVelocidadAdentro = 255;
-const int rangoVelocidadAfuera = 50;
+const int rangoVelocidadAdentro = 170;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFrenoAdentro = 0;
+const int velocidadFrenoAdentro = 75;
 
 // parámetros PID
 const float kP = 1.0 / 7.0;
-const float kD = 35.0;
+const float kD = 60.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
@@ -26,7 +25,7 @@ const int MINIMO_SENSORES_LINEA = 2000;
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
-const int tiempoCicloReferencia = 1040;
+const int tiempoCicloReferencia = 1000;// típicamente 888
 
 // parámetro batería
 // 8.23 V => 847
@@ -35,6 +34,7 @@ const int tiempoCicloReferencia = 1040;
 // 7.71 v => 791
 // 7.50 V => 771 // armado con regla de 3
 const int MINIMO_VALOR_BATERIA = 760;
+int minimoValorBateria = MINIMO_VALOR_BATERIA; // permite modificarlo en caso de emergencia
 const bool usarTensionCompensadaBateria = false;
 const int MAXIMO_VALOR_BATERIA = 859;// = 8.4V / 2 (divisor resitivo) * 1023.0 / 5V
 
@@ -236,7 +236,7 @@ void apagarMotores() {
 }
 
 inline void chequearBateria() {
-  if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
+  if (analogRead(batteryControl) < minimoValorBateria) {
     digitalWrite(led1, HIGH);
     digitalWrite(led2, HIGH);
     digitalWrite(led3, HIGH);
@@ -248,7 +248,7 @@ inline void chequearBateria() {
 }
 
 inline void chequearBateriaBloqueante() {
-  if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
+  if (analogRead(batteryControl) < minimoValorBateria) {
     // si la batería está por debajo del mínimo, parpadea LEDs
     // hasta que se apreta el botón
     while (!apretado(boton2)) {
@@ -262,6 +262,9 @@ inline void chequearBateriaBloqueante() {
       delay(200);
     }
     esperarReboteBoton();
+
+    // luego de apretar el botón 
+    minimoValorBateria -= 5;
     
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
