@@ -163,7 +163,7 @@ U 1 1 571AF8E5
 P 7050 4050
 F 0 "U8" H 7050 4050 60  0000 C CNN
 F 1 "TCRT1000" H 7300 4250 60  0000 C CNN
-F 2 "tcrt1000:TCRT1000" H 6800 4250 60  0001 C CNN
+F 2 "Pin_Headers:Pin_Header_Straight_1x04" H 6800 4250 60  0001 C CNN
 F 3 "" H 7050 4050 60  0000 C CNN
 	1    7050 4050
 	1    0    0    -1  
@@ -377,17 +377,17 @@ F 3 "" H 7500 3250 50  0000 C CNN
 	1    7500 3250
 	1    0    0    -1  
 $EndComp
-Text HLabel 4850 3100 0    60   Input ~ 0
-Sensor1
-Text HLabel 6450 3100 0    60   Input ~ 0
-Sensor2
-Text HLabel 7950 3100 0    60   Input ~ 0
-Sensor3
 Text HLabel 7950 4550 0    60   Input ~ 0
-Sensor6
-Text HLabel 6400 4550 0    60   Input ~ 0
-Sensor5
+Sensor1
+Text HLabel 4850 3100 0    60   Input ~ 0
+Sensor2
 Text HLabel 4900 4550 0    60   Input ~ 0
+Sensor3
+Text HLabel 7950 3100 0    60   Input ~ 0
+Sensor6
+Text HLabel 6450 3100 0    60   Input ~ 0
+Sensor5
+Text HLabel 6400 4550 0    60   Input ~ 0
 Sensor4
 Text HLabel 7750 3350 2    60   Input ~ 0
 +5v
@@ -418,7 +418,7 @@ U 1 1 572D2DA4
 P 1700 3000
 F 0 "R8" V 1780 3000 50  0000 C CNN
 F 1 "2k2" V 1700 3000 50  0000 C CNN
-F 2 "Resistors_SMD:R_0805" V 1630 3000 50  0001 C CNN
+F 2 "Resistors_ThroughHole:Resistor_Horizontal_RM7mm" V 1630 3000 50  0001 C CNN
 F 3 "" H 1700 3000 50  0000 C CNN
 	1    1700 3000
 	0    1    1    0   
@@ -429,7 +429,7 @@ Text HLabel 2250 2650 0    60   Input ~ 0
 +5v
 Text Label 2250 3300 0    60   ~ 0
 habilitado
-Text Label 3300 2850 2    60   ~ 0
+Text Label 8000 4300 2    60   ~ 0
 habilitado
 Text Label 4900 2850 2    60   ~ 0
 habilitado
@@ -438,7 +438,7 @@ habilitado
 Text Label 3350 4300 2    60   ~ 0
 habilitado2
 Text Label 4850 4300 2    60   ~ 0
-habilitado2
+habilitado
 Text Label 6400 4300 2    60   ~ 0
 habilitado2
 Wire Wire Line
@@ -605,7 +605,7 @@ U 1 1 572D36CC
 P 1700 4300
 F 0 "R9" V 1780 4300 50  0000 C CNN
 F 1 "2k2" V 1700 4300 50  0000 C CNN
-F 2 "Resistors_SMD:R_0805" V 1630 4300 50  0001 C CNN
+F 2 "Resistors_ThroughHole:Resistor_Horizontal_RM7mm" V 1630 4300 50  0001 C CNN
 F 3 "" H 1700 4300 50  0000 C CNN
 	1    1700 4300
 	0    1    1    0   
@@ -629,7 +629,7 @@ U 1 1 57897C7E
 P 8650 4050
 F 0 "U12" H 8650 4050 60  0000 C CNN
 F 1 "TCRT1000" H 8900 4250 60  0000 C CNN
-F 2 "tcrt1000:TCRT1000" H 8400 4250 60  0001 C CNN
+F 2 "Pin_Headers:Pin_Header_Straight_1x04" H 8400 4250 60  0001 C CNN
 F 3 "" H 8650 4050 60  0000 C CNN
 	1    8650 4050
 	1    0    0    -1  
@@ -703,7 +703,7 @@ Wire Wire Line
 	9100 4500 9550 4500
 Wire Wire Line
 	9550 4500 9550 4550
-Text Label 8000 4300 2    60   ~ 0
+Text Label 3300 2850 2    60   ~ 0
 habilitado2
 Wire Wire Line
 	8000 4450 8000 4300

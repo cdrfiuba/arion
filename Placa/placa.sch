@@ -242,7 +242,7 @@ U 1 1 56E39FA9
 P 1700 5250
 F 0 "C1" H 1725 5350 50  0000 L CNN
 F 1 "C" H 1725 5150 50  0000 L CNN
-F 2 "Capacitors_ThroughHole:C_Radial_D5_L11_P2" H 1738 5100 50  0001 C CNN
+F 2 "Capacitors_SMD:C_0805_HandSoldering" H 1738 5100 50  0001 C CNN
 F 3 "" H 1700 5250 50  0000 C CNN
 	1    1700 5250
 	1    0    0    -1  
@@ -416,7 +416,7 @@ Text Label 8550 4200 0    60   ~ 0
 M2OUT1
 Text Label 8550 4300 0    60   ~ 0
 M2OUT2
-Text Label 4050 4550 2    60   ~ 0
+Text Label 4050 4650 2    60   ~ 0
 M2IN1
 Text Label 4050 6650 2    60   ~ 0
 M2IN2
@@ -424,7 +424,7 @@ Text Label 8550 3600 0    60   ~ 0
 M1OUT1
 Text Label 8550 3700 0    60   ~ 0
 M1OUT2
-Text Label 4050 4650 2    60   ~ 0
+Text Label 4050 4550 2    60   ~ 0
 M1IN1
 Text Label 4050 6550 2    60   ~ 0
 M1IN2
@@ -572,7 +572,7 @@ F 3 "" H 2150 2500 50  0000 C CNN
 	1    2150 2500
 	1    0    0    -1  
 $EndComp
-Text Label 2150 3550 0    60   ~ 0
+Text Label 1800 3550 0    60   ~ 0
 Led3
 $Comp
 L LED D2
@@ -607,7 +607,7 @@ F 3 "" H 1400 2500 50  0000 C CNN
 	1    1400 2500
 	1    0    0    -1  
 $EndComp
-Text Label 1400 3550 0    60   ~ 0
+Text Label 2150 3550 0    60   ~ 0
 Led1
 $Comp
 L LED D3
@@ -642,7 +642,7 @@ F 3 "" H 1800 2500 50  0000 C CNN
 	1    1800 2500
 	1    0    0    -1  
 $EndComp
-Text Label 1800 3550 0    60   ~ 0
+Text Label 1400 3550 0    60   ~ 0
 Led2
 Text Label 4000 4750 2    60   ~ 0
 Led1
@@ -705,9 +705,9 @@ Text Label 4100 5050 2    60   ~ 0
 XTAL1
 Text Label 4100 5150 2    60   ~ 0
 XTAL2
-Text Label 4500 6350 2    60   ~ 0
-EncoderM2
 Text Label 4500 6250 2    60   ~ 0
+EncoderM2
+Text Label 4500 6350 2    60   ~ 0
 EncoderM1
 Text Label 4150 5800 2    60   ~ 0
 Sensor7
