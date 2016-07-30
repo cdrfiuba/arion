@@ -1,3 +1,6 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
 /** inicio de parámetros configurables **/
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
@@ -89,6 +92,10 @@ const int der    = 4;
 // sólo cuando se prende el robot
 bool inicializarCalibracionInicial = true;
 
+// contadores de encoders
+volatile unsigned long contador_motor_izquierdo = 0;
+volatile unsigned long contador_motor_derecho = 0;
+
 // dirección motor
 const int atras = HIGH;
 const int adelante = LOW;
@@ -144,6 +151,23 @@ void setup() {
   //setBit(ADCSRA, ADPS2);
   //clearBit(ADCSRA, ADPS1);
   //clearBit(ADCSRA, ADPS0);
+
+  // habilita interrupciones globales 
+  // (Arduino igual habilita y deshabilita interrupciones cuando quiere hacer operaciones atómicas)
+  sei();
+  
+  // configura INT0 (pin digital 2) en logical change
+  // (en EIFR cambia el bit INTF0 cuando se dispara la interrupción)
+  // (alternativamente se lo puede configurar como PCINT, usando
+  // PCINT18 en PCIE2 y PPCMSK2)
+  clearBit(EICRA, ISC01);
+  setBit(EICRA, ISC00);
+  setBit(EIMSK, INT0);
+  
+  // configura PCINT5 (pin digital 13), del grupo PCINT0
+  // (en PCIFR cambia el bit PCIF0 cuando se dispara la interrupción)
+  setBit(PCICR, PCIE0);
+  setBit(PCMSK0, PCINT5);
 
   if (inicializarCalibracionInicial) {
     for (int i = 0; i < cantidadDeSensores; i++) {
@@ -225,7 +249,9 @@ void mostrarSensores() {
   debug("%.4d ", sensores[cenIzq]);
   debug("%.4d ", sensores[cen]);
   debug("%.4d ", sensores[cenDer]);
-  debug("%.4d\n", sensores[der]);
+  debug("%.4d ", sensores[der]);
+  debug("%.4lu ", contador_motor_izquierdo);
+  debug("%.4lu\n", contador_motor_derecho);
 }
 
 void apagarMotores() {
@@ -482,11 +508,13 @@ void loop() {
       // Permite ver por puerto serie cuánto tarda el ciclo de PID
       // antes de perder tiempo mandando cosas por puerto serie.
       // Usado para medir tiempoCicloReferencia.
-      tiempoUs = micros() - ultimoTiempoUs;
+      /*tiempoUs = micros() - ultimoTiempoUs;
       debug("%.4i ", tiempoUs);
       debug("% .5i ", (int)errP);
       debug("% .5i ", (int)errD);
-      debug("%.4i\n", reduccionVelocidad);
+      debug("%.4i ", reduccionVelocidad);*/
+      debug("%.4lu ", contador_motor_izquierdo);
+      debug("%.4lu\n", contador_motor_derecho);
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
@@ -494,6 +522,8 @@ void loop() {
     while (tiempoUs < tiempoCicloReferencia) {
       tiempoUs = micros() - ultimoTiempoUs;
     }
+    //contador_motor_izquierdo = 0;
+    //contador_motor_derecho = 0;
 
     ultimoTiempoUs = micros();
 
@@ -510,4 +540,12 @@ void loop() {
 
 }
 
+// handler para PCINT5
+ISR(PCINT0_vect) {
+  contador_motor_izquierdo++;
+}
+// handler para INT0
+ISR(INT0_vect) {
+  contador_motor_derecho++;
+}
 
