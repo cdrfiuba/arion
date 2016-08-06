@@ -64,7 +64,7 @@ const int led1 = 9;
 const int led2 = 8;
 const int led3 = 12;
 const int boton1 = 7;
-const int boton2 = 6;
+const int boton2 = 4; // es el pin 6, ahora usado por un encoder
 const int boton3 = 4;
 const int sensor0 = A0;
 const int sensor1 = A1;
@@ -155,19 +155,35 @@ void setup() {
   // habilita interrupciones globales 
   // (Arduino igual habilita y deshabilita interrupciones cuando quiere hacer operaciones atómicas)
   sei();
+
+  // Configuración de encoders
+  // Para poder leer encoders con las interrupciones de Pin Change
+  // (que no son externas) y distinguir las dos interrupciones,
+  // tienen que estar en grupos distintos de PCIE0, PCIE1 y PCIE2.
+  // Actualmente está configurado INT0 (externa) y PCINT22 (pin change)
   
   // configura INT0 (pin digital 2) en logical change
+  // EICRA determina el modo de disparo de la interrupción
   // (en EIFR cambia el bit INTF0 cuando se dispara la interrupción)
   // (alternativamente se lo puede configurar como PCINT, usando
-  // PCINT18 en PCIE2 y PPCMSK2)
+  // PCINT18 en PCIE2 y PCMSK2)
   clearBit(EICRA, ISC01);
   setBit(EICRA, ISC00);
   setBit(EIMSK, INT0);
+  // setBit(PCICR, PCIE2);
+  // setBit(PCMSK2, PCINT18);
   
-  // configura PCINT5 (pin digital 13), del grupo PCINT0
-  // (en PCIFR cambia el bit PCIF0 cuando se dispara la interrupción)
-  setBit(PCICR, PCIE0);
-  setBit(PCMSK0, PCINT5);
+  // // configura PCINT5 (pin digital 13), del grupo PCINT0
+  // // (en PCIFR cambia el bit PCIF0 cuando se dispara la interrupción)
+  // // (como el pin 13 tiene el LED de Arduino, hay que usar una R de pullup)
+  // setBit(PCICR, PCIE0);
+  // setBit(PCMSK0, PCINT5);
+  // pinMode(13, INPUT_PULLUP);
+
+  // configura PCINT22 (pin digital 6), del grupo PCINT2
+  // (en PCIFR cambia el bit PCIF2 cuando se dispara la interrupción)
+  setBit(PCICR, PCIE2);
+  setBit(PCMSK2, PCINT22);
 
   if (inicializarCalibracionInicial) {
     for (int i = 0; i < cantidadDeSensores; i++) {
@@ -540,12 +556,11 @@ void loop() {
 
 }
 
-// handler para PCINT5
-ISR(PCINT0_vect) {
+// handler para PCINT18
+ISR(PCINT2_vect) {
   contador_motor_izquierdo++;
 }
 // handler para INT0
 ISR(INT0_vect) {
   contador_motor_derecho++;
 }
-
