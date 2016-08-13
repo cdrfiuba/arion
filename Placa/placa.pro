@@ -1,4 +1,4 @@
-update=Fri 15 Jul 2016 05:54:03 PM ART
+update=vie 12 ago 2016 21:18:08 ART
 version=1
 last_client=kicad
 [pcbnew]
@@ -62,3 +62,4 @@ LibName30=Bibliotecas/tcrt1000
 LibName31=Bibliotecas/reg_204-5
 LibName32=Bibliotecas/DVR8833
 LibName33=Bibliotecas/sn74lvc2g86
+LibName34=Bibliotecas/logo
