@@ -1,5 +1,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <EEPROM.h>
 
 // nada marron nada blanco rojo nada  EEE                      89
 //              micro
@@ -49,9 +50,6 @@ const int velocidadFrenoCurva = 40;
 // se cae inmeditamente después de terminar esa recta)
 const int cantidadDeRectas = 25; // asume que empieza en recta
 
-const int cantidadDeSegmentos = 4; // Usado para encoders
-
-
 const bool usarTiemposPorRecta = false;
 // Vector de distancias {500, 300, 4500, 750, 1000, 2000, 1500, 2500, 10000};
 //const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 600, 65500}; // andan!
@@ -68,10 +66,18 @@ const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0,
 //  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
 //};
 
-// Arrays donde se guardan las distancias medidas por los encoders
-unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = { 0, 0, 0, 0 };
-unsigned long distanciasRuedaDerecha[cantidadDeSegmentos]   = { 0, 0, 0, 0 };
 
+// Usado para encoders
+const int cantidadDeSegmentos = 4;
+// Arrays donde se guardan las distancias medidas por los encoders
+unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
+unsigned long distanciasRuedaDerecha[cantidadDeSegmentos] = {};
+const int aprenderDistancias = 0;
+const int usarDistancias = 1;
+const int ignorarDistancias = 2;
+// determina si se graban los valores en la EEPROM, si se usan para controlar
+// la velocidad de recta y curva, o si se ignoran
+const int modoUsoDistancias = usarDistancias;
 
 // espejada //const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 1000, 500, 600, 500, 0, 2000, 0, 65500};
 
@@ -111,6 +117,7 @@ const int tiempoCicloReferencia = 1040;//390;
 // 7.71 v => 791
 // 7.50 V => 771 // armado con regla de 3
 const int MINIMO_VALOR_BATERIA = 760;
+int minimoValorBateria = MINIMO_VALOR_BATERIA; // permite modificarlo en caso de emergencia
 const bool usarTensionCompensadaBateria = false;
 const int MAXIMO_VALOR_BATERIA = 859;// = 8.4V / 2 (divisor resitivo) * 1023.0 / 5V
 
@@ -358,7 +365,7 @@ void apagarMotores() {
 }
 
 inline void chequearBateria() {
-  if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
+  if (analogRead(batteryControl) < minimoValorBateria) {
     digitalWrite(led1, HIGH);
     digitalWrite(led2, HIGH);
     digitalWrite(led3, HIGH);
@@ -370,7 +377,7 @@ inline void chequearBateria() {
 }
 
 inline void chequearBateriaBloqueante() {
-  if (analogRead(batteryControl) < MINIMO_VALOR_BATERIA) {
+  if (analogRead(batteryControl) < minimoValorBateria) {
     // si la batería está por debajo del mínimo, parpadea LEDs
     // hasta que se apreta el botón
     while (!apretado(boton2)) {
@@ -385,6 +392,9 @@ inline void chequearBateriaBloqueante() {
     }
     esperarReboteBoton();
 
+    // luego de apretar el botón 
+    minimoValorBateria -= 5;
+    
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
     digitalWrite(led3, LOW);
@@ -423,7 +433,7 @@ void loop() {
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
   int indiceSegmento = 0; // almacena el indice de segmento de la pista
-  int cantidaDeVueltasADar = 2;
+  int cantidadDeVueltasADar = 2;
 
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
@@ -445,6 +455,9 @@ void loop() {
   // hasta que se presione el botón, espera,
   // y muestra en los leds el valor del sensor central
   while (!apretado(boton1)) {
+    if (modoUsoDistancias == usarDistancias) {
+      leerDistanciasDeEEPROM();
+    }
     obtenerSensoresCalibrados();
     mostrarSensorLEDs(cen);
     mostrarSensores();
@@ -552,7 +565,7 @@ void loop() {
       (long)sensores[cenDer] +
       (long)sensores[der]
     );
-
+    
     // clampea valor extremo para indicarle al PID
     // que corrija con toda su fuerza
     if (estadoActualAdentro == false) {
@@ -565,28 +578,29 @@ void loop() {
 
     sensorCurvaActivo = ((sensores[curva] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
     if (sensorCurvaActivo == 1 && sensorCurvaActivo != ultimoValorSensorCurva) {
-      if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA){
+      if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA) {
         // tengo seguridad de que pasó el rebote del sensor
         modoCurva = !modoCurva;
 
-        // indice usado para identificar el segmento
-        indiceSegmento = (indiceSegmento + 1 ) % cantidadDeSegmentos;
-        distanciasRuedaIzquierda[indiceSegmento] = contador_motor_izquierdo;
-        distanciasRuedaDerecha[indiceSegmento] = contador_motor_derecho;
-        // Reseteo el valor del encoder
-        contador_motor_izquierdo = 0;
-        contador_motor_derecho = 0;
+        if (modoUsoDistancias == aprenderDistancias) {
+          // indice usado para identificar el segmento
+          distanciasRuedaIzquierda[indiceSegmento] = contador_motor_izquierdo;
+          distanciasRuedaDerecha[indiceSegmento] = contador_motor_derecho;
+          indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
+          // Reseteo el valor del encoder
+          contador_motor_izquierdo = 0;
+          contador_motor_derecho = 0;
 
-        if (indiceSegmento == 0)
-        {
-          cantidaDeVueltasADar--;
+          if (indiceSegmento == 0) {
+            cantidadDeVueltasADar--;
 
-          if (cantidaDeVueltasADar <= 0) {
-            apagarMotores();
-            break;
+            if (cantidadDeVueltasADar <= 0) {
+              apagarMotores();
+              guardarDistanciasEnEEPROM();
+              break;
+            }
           }
         }
-
 
         ultimoTiempoModoCurva = millis();
         // si paso a modo curva, freno porque venia rápido
@@ -755,4 +769,37 @@ ISR(PCINT2_vect) {
 // handler para INT0
 ISR(INT0_vect) {
   contador_motor_derecho++;
+}
+
+void guardarLongEnEEPROM(long valor, int posicion) {
+  uint8_t low = valor & 0xFF;
+  uint8_t high = valor >> 8;
+  EEPROM.write(posicion, low);
+  EEPROM.write(posicion + 1, high);
+}
+long leerLongDeEEPROM(int posicion) {
+  uint8_t low;
+  uint8_t high;
+  low = EEPROM.read(posicion);
+  high = EEPROM.read(posicion + 1);
+  return (high << 8) + low;
+}
+
+void guardarDistanciasEnEEPROM() {
+  int posicion = 0;
+  for (int i = 0; i < cantidadDeSegmentos; i++) {
+    guardarLongEnEEPROM(distanciasRuedaIzquierda[i], posicion);
+    posicion = posicion + 2;
+    guardarLongEnEEPROM(distanciasRuedaDerecha[i], posicion);
+    posicion = posicion + 2;
+  }
+}
+void leerDistanciasDeEEPROM() {
+  int posicion = 0;
+  for (int i = 0; i < cantidadDeSegmentos; i++) {
+    distanciasRuedaIzquierda[i] = leerLongDeEEPROM(posicion);
+    posicion = posicion + 2;
+    distanciasRuedaDerecha[i] = leerLongDeEEPROM(posicion);
+    posicion = posicion + 2;
+  }
 }
