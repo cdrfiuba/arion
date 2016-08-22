@@ -2,27 +2,6 @@
 #include <avr/interrupt.h>
 #include <EEPROM.h>
 
-// nada marron nada blanco rojo nada  EEE                      89
-//              micro
-
-
-// nada nada blanco rojo marron
-//            usb
-
-// tiempos de referencia Bahía Blanca 2015
-// curva 160, recta 160, sin velocidad por tramo: 18.66
-// curva 160, recta 255, con velocidad por tramo: 15.76
-  // velocidades por tramo = {0, 0, 2000, 0, 500, 600, 500, 1000, 65500}; // no anda para uno de los carriles
-
-
-
-// curva 160, recta 255, con velocidad por tramo: 16.09
-  // tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 700, 65500}; // anda en ambos carriles
-
-
-// para el año que viene: competir con algún Arión en Libre
-//
-
 /** inicio de parámetros configurables **/
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
@@ -43,31 +22,7 @@ const int rangoVelocidadAfuera = 50;
 const int velocidadFrenoRecta = 0;
 const int velocidadFrenoCurva = 40;
 
-// parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
-// y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
-// (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
-// en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
-// se cae inmeditamente después de terminar esa recta)
-const int cantidadDeRectas = 25; // asume que empieza en recta
-
-const bool usarTiemposPorRecta = false;
-// Vector de distancias {500, 300, 4500, 750, 1000, 2000, 1500, 2500, 10000};
-//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 0, 2000, 0, 300, 400, 200, 600, 65500}; // andan!
-
-// distancias por tramo pista grande = {0,       0, 4000, 0, 3000, 4000, 0, 4000, 0, 1500, 2500, 2500, 1500  }
-//REPITE DESDE DODNE ESTA SEPARADO
-
-const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0,
-  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 0, /* 1 vuelta */
-  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 65000 /* 1 vuelta */
-};
-//const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, // seguro
-//  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
-//  0, 1500, 0, 200, 1500, 0, 1500, 0, 0, 350, 350, 0, /* 1 vuelta */
-//};
-
-
-// Usado para encoders
+// parámetros encoders
 const int cantidadDeSegmentos = 4;
 // Arrays donde se guardan las distancias medidas por los encoders
 unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
@@ -79,8 +34,17 @@ const int ignorarDistancias = 2;
 // la velocidad de recta y curva, o si se ignoran
 const int modoUsoDistancias = usarDistancias;
 
-// espejada //const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0, 1000, 500, 600, 500, 0, 2000, 0, 65500};
-
+// parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
+// y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
+// (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
+// en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
+// se cae inmediatamente después de terminar esa recta)
+const bool usarTiemposPorRecta = false;
+const int cantidadDeRectas = 25; // asume que empieza en recta
+const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0,
+  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 0,    /* 1 vuelta */
+  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 65000 /* 1 vuelta */
+};
 const bool usarVelocidadPorTramo = false;
 const bool usarCarrilIzquierdo = false;
 const int R = rangoVelocidadRecta;
@@ -119,8 +83,7 @@ const int tiempoCicloReferencia = 1040;//390;
 const int MINIMO_VALOR_BATERIA = 760;
 int minimoValorBateria = MINIMO_VALOR_BATERIA; // permite modificarlo en caso de emergencia
 const bool usarTensionCompensadaBateria = false;
-const int MAXIMO_VALOR_BATERIA = 859;// = 8.4V / 2 (divisor resitivo) * 1023.0 / 5V
-
+const int MAXIMO_VALOR_BATERIA = 859; // = 8.4V / 2 (divisor resistivo) * 1023.0 / 5V
 
 // parámetros para promedio ponderado de sensoresLinea
 const int COEFICIENTE_SENSOR_IZQ     = 0;
@@ -236,7 +199,8 @@ void setup() {
   //clearBit(ADCSRA, ADPS0);
 
   // habilita interrupciones globales
-  // (Arduino igual habilita y deshabilita interrupciones cuando quiere hacer operaciones atómicas)
+  // NOTA: Arduino deshabilita y habilita interrupciones cuando quiere leer 
+  // los valores de millis() y micros().
   sei();
 
   // Configuración de encoders
@@ -248,11 +212,11 @@ void setup() {
   // configura INT0 (pin digital 2) en logical change
   // EICRA determina el modo de disparo de la interrupción
   // (en EIFR cambia el bit INTF0 cuando se dispara la interrupción)
-  // (alternativamente se lo puede configurar como PCINT, usando
-  // PCINT18 en PCIE2 y PCMSK2)
   clearBit(EICRA, ISC01);
   setBit(EICRA, ISC00);
   setBit(EIMSK, INT0);
+  // alternativamente se lo puede configurar como PCINT, usando
+  // PCINT18 en PCIE2 y PCMSK2
   // setBit(PCICR, PCIE2);
   // setBit(PCMSK2, PCINT18);
 
@@ -348,8 +312,7 @@ void mostrarSensores() {
   // debug("%.4lu\n", contador_motor_derecho);
   debug("%.4lu ", contador_motor_derecho);
   debug(" %s ", "|");
-  for (int i = 0 ; i< cantidadDeSegmentos; i++)
-  {
+  for (int i = 0; i < cantidadDeSegmentos; i++) {
     debug("{%lu, ", distanciasRuedaIzquierda[i]);
     debug("%lu} ", distanciasRuedaDerecha[i]);
   }
@@ -379,7 +342,7 @@ inline void chequearBateria() {
 inline void chequearBateriaBloqueante() {
   if (analogRead(batteryControl) < minimoValorBateria) {
     // si la batería está por debajo del mínimo, parpadea LEDs
-    // hasta que se apreta el botón
+    // hasta que se aprieta el botón
     while (!apretado(boton2)) {
       digitalWrite(led1, HIGH);
       digitalWrite(led2, HIGH);
@@ -393,7 +356,7 @@ inline void chequearBateriaBloqueante() {
     esperarReboteBoton();
 
     // luego de apretar el botón 
-    minimoValorBateria -= 5;
+    minimoValorBateria -= 10;
     
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
@@ -512,7 +475,7 @@ void loop() {
     coeficienteBateria = 1.0;
   }
 
-  // inicializacion tiempos
+  // inicialización tiempos
   ultimoTiempoRecta = millis();
   ultimoTiempoUs = micros();
 
@@ -643,7 +606,7 @@ void loop() {
       rangoVelocidad = rangoVelocidadAfuera;
     }
 
-    // aplico el coeficiente de compensacion de tensión de la batería
+    // aplico el coeficiente de compensación de tensión de la batería
     rangoVelocidad = rangoVelocidad * coeficienteBateria;
     velocidadFreno = velocidadFreno * coeficienteBateria;
     if (rangoVelocidad > 255) {
