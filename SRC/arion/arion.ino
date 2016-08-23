@@ -14,16 +14,18 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
+const int rangoVelocidadRecta = 180; // velocidad real = rango - freno / 2
 const int rangoVelocidadCurva = 100; //
 const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
 const int velocidadFrenoRecta = 0;
-const int velocidadFrenoCurva = 40;
+const int velocidadFrenoCurvaInicial = 50;
+int velocidadFrenoCurva = velocidadFrenoCurvaInicial;
+const int duracionFrenoCurva = 200; // ms
 
 // parámetros encoders
-const int cantidadDeSegmentos = 4;
+const int cantidadDeSegmentos = 8;
 // Arrays donde se guardan las distancias medidas por los encoders
 unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
 unsigned long distanciasRuedaDerecha[cantidadDeSegmentos] = {};
@@ -33,6 +35,8 @@ const int ignorarDistancias = 2;
 // determina si se graban los valores en la EEPROM, si se usan para controlar
 // la velocidad de recta y curva, o si se ignoran
 const int modoUsoDistancias = usarDistancias;
+int cantidadDeVueltasADar = 2; // en aprendizaje, se frena al terminar
+const int distanciaAnticipoCurva = 200; // medido en cuentas de encoder
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
 // y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
@@ -54,7 +58,7 @@ const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
 
 // parámetros PID
 const float kP = 1.0 / 7.0;
-const float kD = 35.0;
+const float kD = 50.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros para modo curva
@@ -241,6 +245,10 @@ void setup() {
   digitalWrite(ledArduino, LOW);
   apagarMotores();
 
+  // Reseteo el valor del encoder
+  contador_motor_izquierdo = 0;
+  contador_motor_derecho = 0;
+
 }
 
 bool apretado(int boton) {
@@ -392,11 +400,13 @@ void loop() {
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
   unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
+  unsigned long int ultimoTiempoCurva = 0; // guarda el valor de millis()
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
   int indiceSegmento = 0; // almacena el indice de segmento de la pista
-  int cantidadDeVueltasADar = 2;
+  int distanciaActual = 0;
+  int distanciaEsperada = 0;
 
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
@@ -546,17 +556,20 @@ void loop() {
         modoCurva = !modoCurva;
 
         if (modoUsoDistancias == aprenderDistancias) {
-          // indice usado para identificar el segmento
           distanciasRuedaIzquierda[indiceSegmento] = contador_motor_izquierdo;
           distanciasRuedaDerecha[indiceSegmento] = contador_motor_derecho;
-          indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
-          // Reseteo el valor del encoder
-          contador_motor_izquierdo = 0;
-          contador_motor_derecho = 0;
-
+        }
+        
+        // indice usado para identificar el segmento
+        indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
+        
+        // Reseteo el valor del encoder
+        contador_motor_izquierdo = 0;
+        contador_motor_derecho = 0;
+        
+        if (modoUsoDistancias == aprenderDistancias) {
           if (indiceSegmento == 0) {
             cantidadDeVueltasADar--;
-
             if (cantidadDeVueltasADar <= 0) {
               apagarMotores();
               guardarDistanciasEnEEPROM();
@@ -569,6 +582,8 @@ void loop() {
         // si paso a modo curva, freno porque venia rápido
         if (modoCurva == true) {
           // frenarMotores(); // Para las pruebas de encoders lo comento
+          velocidadFrenoCurva = rangoVelocidadCurva;
+          ultimoTiempoCurva = millis();
         } else {
           ultimoTiempoRecta = millis();
           contadorRecta++;
@@ -581,6 +596,11 @@ void loop() {
     ultimoValorSensorCurva = sensorCurvaActivo;
 
     if (modoCurva) {
+      // en modo Curva aplico el freno fuerte durante poco tiempo,
+      // el resto va a freno normal
+      if (millis() - ultimoTiempoCurva > duracionFrenoCurva) {
+        velocidadFrenoCurva = velocidadFrenoCurvaInicial;
+      }
       rangoVelocidad = rangoVelocidadCurva;
       velocidadFreno = velocidadFrenoCurva;
       if (usarVelocidadPorTramo) {
@@ -599,11 +619,21 @@ void loop() {
           digitalWrite(led3, LOW);
         }
       }
+      if (modoUsoDistancias == usarDistancias) {
+        distanciaActual = (contador_motor_izquierdo + contador_motor_derecho) / 2;
+        distanciaEsperada = (distanciasRuedaIzquierda[indiceSegmento] + distanciasRuedaDerecha[indiceSegmento]) / 2;
+        if (distanciaActual + distanciaAnticipoCurva > distanciaEsperada) {
+          rangoVelocidad = rangoVelocidadCurva;
+          velocidadFreno = velocidadFrenoCurva;
+          digitalWrite(led3, HIGH);
+        }
+      }
       digitalWrite(led2, HIGH);
     }
 
     if (estadoActualAdentro == false) {
       rangoVelocidad = rangoVelocidadAfuera;
+      velocidadFreno = velocidadFrenoCurva;
     }
 
     // aplico el coeficiente de compensación de tensión de la batería
