@@ -36,6 +36,7 @@ const int ignorarDistancias = 2;
 const int modoUsoDistancias = usarDistancias;
 int cantidadDeVueltasADar = 2; // en aprendizaje, se frena al terminar
 const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
+bool usarCarrilIzquierdo = false;
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
 // y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
@@ -49,7 +50,6 @@ const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0,
   0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 65000 /* 1 vuelta */
 };
 const bool usarVelocidadPorTramo = false;
-const bool usarCarrilIzquierdo = false;
 const int R = rangoVelocidadRecta;
 const int C = rangoVelocidadCurva;
 const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
@@ -166,6 +166,7 @@ char debug_string_buffer[20];
 
 #define clearBit(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define setBit(sfr, bit)   (_SFR_BYTE(sfr) |=  _BV(bit))
+#define EEPROM_LENGTH 1024 // el ATmega328 tiene 1KB de EEPROM
 
 void setup() {
   // como los motores se manejan con AnalogWrite,
@@ -309,7 +310,7 @@ void mostrarSensorLEDs(int sensor) {
   digitalWrite(led3, ((sensores[sensor] / 256) ? HIGH : LOW));
 }
 
-void mostrarSensores() {
+void mostrarSensoresPorSerie() {
   debug("%.3d ", analogRead(batteryControl));
   debug("%.4d ", sensores[izq]);
   debug("%.4d ", sensores[cenIzq]);
@@ -318,15 +319,13 @@ void mostrarSensores() {
   debug("%.4d ", sensores[der]);
   debug("%.4d ", sensores[curva]);
   debug("%.4lu ", contadorMotorIzquierdo);
-  // debug("%.4lu\n", contadorMotorDerecho);
   debug("%.4lu ", contadorMotorDerecho);
-  debug(" %s ", "|");
+  debug("%s ", "|");
   for (int i = 0; i < cantidadDeSegmentos; i++) {
     debug("{%lu, ", distanciasRuedaIzquierda[i]);
     debug("%lu} ", distanciasRuedaDerecha[i]);
   }
-  debug("%s","\n");
-
+  debug("%s", "\n");
 }
 
 void apagarMotores() {
@@ -427,17 +426,30 @@ void loop() {
   // inicialización de todas las cosas
   setup();
 
-  // hasta que se presione el botón, espera,
-  // y muestra en los leds el valor del sensor central
+  // hasta que se presione el botón, espera
   while (!apretado(boton1)) {
+    chequearBateriaBloqueante();
+    
+    obtenerSensoresCalibrados();
+    mostrarSensoresPorSerie();
+    // mostrarSensorLEDs(cen);
+    
+    // carga opcional de información de encoders
     if (modoUsoDistancias == usarDistancias) {
       leerDistanciasDeEEPROM();
     }
-    obtenerSensoresCalibrados();
-    mostrarSensorLEDs(cen);
-    mostrarSensores();
-    chequearBateriaBloqueante();
 
+    // muestra estado de encoders
+    if (usarCarrilIzquierdo) {
+      digitalWrite(led1, HIGH);
+      digitalWrite(led2, LOW);
+    } else {
+      digitalWrite(led1, LOW);
+      digitalWrite(led2, HIGH);
+    }
+    
+    // calibración usando el botón
+    calibracionReseteada = false;
     while (apretado(boton3)) {
       if (!calibracionReseteada) {
         // reseteo la calibración
@@ -446,6 +458,9 @@ void loop() {
           maximosSensores[i] = 0;
         }
         calibracionReseteada = true;
+        // reuso la bandera de calibracionReseteada para que esto se ejecute 
+        // una sola vez por apretada de botón
+        usarCarrilIzquierdo = !usarCarrilIzquierdo;
       }
 
       digitalWrite(led1, HIGH);
@@ -455,6 +470,7 @@ void loop() {
       digitalWrite(led3, LOW);
       delay(50);
     }
+    
   }
   esperarReboteBoton();
   digitalWrite(led1, LOW);
@@ -786,6 +802,14 @@ long leerLongDeEEPROM(int posicion) {
 
 void guardarDistanciasEnEEPROM() {
   int posicion = 0;
+  
+  // las distancias del carril derecho se guardan después de todas las del 
+  // carril izquierdo
+  if (!usarCarrilIzquierdo) {
+    // cada segmento usa 2 bytes por rueda
+    posicion = cantidadDeSegmentos * 4;
+  }
+  
   for (int i = 0; i < cantidadDeSegmentos; i++) {
     guardarLongEnEEPROM(distanciasRuedaIzquierda[i], posicion);
     posicion = posicion + 2;
@@ -795,6 +819,14 @@ void guardarDistanciasEnEEPROM() {
 }
 void leerDistanciasDeEEPROM() {
   int posicion = 0;
+  
+  // las distancias del carril derecho se guardan después de todas las del 
+  // carril izquierdo
+  if (!usarCarrilIzquierdo) {
+    // cada segmento usa 2 bytes por rueda
+    posicion = cantidadDeSegmentos * 4;
+  }
+  
   for (int i = 0; i < cantidadDeSegmentos; i++) {
     distanciasRuedaIzquierda[i] = leerLongDeEEPROM(posicion);
     posicion = posicion + 2;
