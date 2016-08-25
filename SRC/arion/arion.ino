@@ -6,7 +6,7 @@
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
 const bool DEBUG = false;
-// const bool DEBUG = true;
+//const bool DEBUG = true;
 
 // parámetros para estadoActualAdentro,
 // determina si se debe clampear los valores de sensoresLinea en el PID
@@ -14,15 +14,14 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 180; // velocidad real = rango - freno / 2
+const int rangoVelocidadRecta = 210; // velocidad real = rango - freno / 2
 const int rangoVelocidadCurva = 100; //
 const int rangoVelocidadAfuera = 50;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
 const int velocidadFrenoRecta = 0;
-const int velocidadFrenoCurvaInicial = 50;
-int velocidadFrenoCurva = velocidadFrenoCurvaInicial;
-const int duracionFrenoCurva = 200; // ms
+const int velocidadFrenoCurva = 20;
+const int velocidadFrenoAfuera = 0;
 
 // parámetros encoders
 const int cantidadDeSegmentos = 8;
@@ -36,7 +35,7 @@ const int ignorarDistancias = 2;
 // la velocidad de recta y curva, o si se ignoran
 const int modoUsoDistancias = usarDistancias;
 int cantidadDeVueltasADar = 2; // en aprendizaje, se frena al terminar
-const int distanciaAnticipoCurva = 200; // medido en cuentas de encoder
+const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
 // y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
@@ -57,8 +56,10 @@ const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
 const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
 
 // parámetros PID
-const float kP = 1.0 / 7.0;
-const float kD = 50.0;
+const float kPRecta = 1.0 / 7.0;
+const float kDRecta = 50.0;
+const float kPCurva = 1.0 / 7.0;
+const float kDCurva = 40.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros para modo curva
@@ -154,8 +155,8 @@ const int derecha = 1;
 const int izquierda = 0;
 
 // contadores de encoders
-volatile unsigned long contador_motor_izquierdo = 0;
-volatile unsigned long contador_motor_derecho = 0;
+volatile unsigned long contadorMotorIzquierdo = 0;
+volatile unsigned long contadorMotorDerecho = 0;
 
 // macro y string de debug por puerto serie
 char debug_string_buffer[20];
@@ -246,8 +247,8 @@ void setup() {
   apagarMotores();
 
   // Reseteo el valor del encoder
-  contador_motor_izquierdo = 0;
-  contador_motor_derecho = 0;
+  contadorMotorIzquierdo = 0;
+  contadorMotorDerecho = 0;
 
 }
 
@@ -316,9 +317,9 @@ void mostrarSensores() {
   debug("%.4d ", sensores[cenDer]);
   debug("%.4d ", sensores[der]);
   debug("%.4d ", sensores[curva]);
-  debug("%.4lu ", contador_motor_izquierdo);
-  // debug("%.4lu\n", contador_motor_derecho);
-  debug("%.4lu ", contador_motor_derecho);
+  debug("%.4lu ", contadorMotorIzquierdo);
+  // debug("%.4lu\n", contadorMotorDerecho);
+  debug("%.4lu ", contadorMotorDerecho);
   debug(" %s ", "|");
   for (int i = 0; i < cantidadDeSegmentos; i++) {
     debug("{%lu, ", distanciasRuedaIzquierda[i]);
@@ -382,6 +383,8 @@ void loop() {
   float errPAnterior = 0;
   //float errI = 0;
   float errD = 0;
+  float kP = 1;
+  float kD = 0;
   int rangoVelocidad;
   int velocidadFreno;
   int reduccionVelocidad;
@@ -400,7 +403,6 @@ void loop() {
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
   unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
-  unsigned long int ultimoTiempoCurva = 0; // guarda el valor de millis()
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
@@ -491,6 +493,7 @@ void loop() {
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
+    
     //chequearBateria();
     obtenerSensoresCalibrados();
 
@@ -556,16 +559,16 @@ void loop() {
         modoCurva = !modoCurva;
 
         if (modoUsoDistancias == aprenderDistancias) {
-          distanciasRuedaIzquierda[indiceSegmento] = contador_motor_izquierdo;
-          distanciasRuedaDerecha[indiceSegmento] = contador_motor_derecho;
+          distanciasRuedaIzquierda[indiceSegmento] = contadorMotorIzquierdo;
+          distanciasRuedaDerecha[indiceSegmento] = contadorMotorDerecho;
         }
         
         // indice usado para identificar el segmento
         indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
         
         // Reseteo el valor del encoder
-        contador_motor_izquierdo = 0;
-        contador_motor_derecho = 0;
+        contadorMotorIzquierdo = 0;
+        contadorMotorDerecho = 0;
         
         if (modoUsoDistancias == aprenderDistancias) {
           if (indiceSegmento == 0) {
@@ -580,10 +583,8 @@ void loop() {
 
         ultimoTiempoModoCurva = millis();
         // si paso a modo curva, freno porque venia rápido
-        if (modoCurva == true) {
+        if (modoCurva) {
           // frenarMotores(); // Para las pruebas de encoders lo comento
-          velocidadFrenoCurva = rangoVelocidadCurva;
-          ultimoTiempoCurva = millis();
         } else {
           ultimoTiempoRecta = millis();
           contadorRecta++;
@@ -596,11 +597,8 @@ void loop() {
     ultimoValorSensorCurva = sensorCurvaActivo;
 
     if (modoCurva) {
-      // en modo Curva aplico el freno fuerte durante poco tiempo,
-      // el resto va a freno normal
-      if (millis() - ultimoTiempoCurva > duracionFrenoCurva) {
-        velocidadFrenoCurva = velocidadFrenoCurvaInicial;
-      }
+      kP = kPCurva;
+      kD = kDCurva;
       rangoVelocidad = rangoVelocidadCurva;
       velocidadFreno = velocidadFrenoCurva;
       if (usarVelocidadPorTramo) {
@@ -609,6 +607,8 @@ void loop() {
       digitalWrite(led2, LOW);
       digitalWrite(led3, LOW);
     } else {
+      kP = kPRecta;
+      kD = kDRecta;
       rangoVelocidad = rangoVelocidadRecta;
       velocidadFreno = velocidadFrenoRecta;
       if (usarTiemposPorRecta) {
@@ -620,12 +620,14 @@ void loop() {
         }
       }
       if (modoUsoDistancias == usarDistancias) {
-        distanciaActual = (contador_motor_izquierdo + contador_motor_derecho) / 2;
+        distanciaActual = (contadorMotorIzquierdo + contadorMotorDerecho) / 2;
         distanciaEsperada = (distanciasRuedaIzquierda[indiceSegmento] + distanciasRuedaDerecha[indiceSegmento]) / 2;
         if (distanciaActual + distanciaAnticipoCurva > distanciaEsperada) {
-          rangoVelocidad = rangoVelocidadCurva;
-          velocidadFreno = velocidadFrenoCurva;
+          rangoVelocidad = rangoVelocidadAfuera; // velocidad Afuera es más lenta
+          //velocidadFreno = velocidadFrenoRecta; // con freno curva cabecea mucho
           digitalWrite(led3, HIGH);
+        } else {
+          digitalWrite(led3, LOW);
         }
       }
       digitalWrite(led2, HIGH);
@@ -633,17 +635,22 @@ void loop() {
 
     if (estadoActualAdentro == false) {
       rangoVelocidad = rangoVelocidadAfuera;
-      velocidadFreno = velocidadFrenoCurva;
+      velocidadFreno = velocidadFrenoAfuera;
+      digitalWrite(led1, HIGH);
+    } else {
+      digitalWrite(led1, LOW);
     }
 
     // aplico el coeficiente de compensación de tensión de la batería
-    rangoVelocidad = rangoVelocidad * coeficienteBateria;
-    velocidadFreno = velocidadFreno * coeficienteBateria;
-    if (rangoVelocidad > 255) {
-      rangoVelocidad = 255;
-    }
-    if (velocidadFreno > 255) {
-      velocidadFreno = 255;
+    if (usarTensionCompensadaBateria) {
+      rangoVelocidad = rangoVelocidad * coeficienteBateria;
+      velocidadFreno = velocidadFreno * coeficienteBateria;
+      if (rangoVelocidad > 255) {
+        rangoVelocidad = 255;
+      }
+      if (velocidadFreno > 255) {
+        velocidadFreno = 255;
+      }
     }
 
     // 20 microsegundos
@@ -707,11 +714,10 @@ void loop() {
       // Usado para medir tiempoCicloReferencia.
       tiempoUs = micros() - ultimoTiempoUs;
       debug("%.4i ", tiempoUs);
-      debug("% .5i ", (int)errP);
-      debug("% .5i ", (int)errD);
-      debug("%.4i ", reduccionVelocidad);
-      debug("%.4lu ", contador_motor_izquierdo);
-      debug("%.4lu\n", contador_motor_derecho);
+      debug("%.4i ", rangoVelocidad);
+      debug("%.4i ", velocidadMotorFrenado);
+      debug("%.4lu ", contadorMotorIzquierdo);
+      debug("%.4lu\n", contadorMotorDerecho);
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
@@ -757,11 +763,11 @@ inline void frenarMotores() {
 
 // handler para PCINT22
 ISR(PCINT2_vect) {
-  contador_motor_izquierdo++;
+  contadorMotorIzquierdo++;
 }
 // handler para INT0
 ISR(INT0_vect) {
-  contador_motor_derecho++;
+  contadorMotorDerecho++;
 }
 
 void guardarLongEnEEPROM(long valor, int posicion) {
