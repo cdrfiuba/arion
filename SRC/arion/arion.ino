@@ -14,14 +14,21 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 210; // velocidad real = rango - freno / 2
-const int rangoVelocidadCurva = 100; //
-const int rangoVelocidadAfuera = 50;
+const int rangoVelocidadRecta = 110; // velocidad real = rango - freno / 2
+const int rangoVelocidadCurva = 110; //
+const int rangoVelocidadAfuera = 0;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFrenoRecta = 0;
-const int velocidadFrenoCurva = 20;
+const int velocidadFrenoRecta = 40;
+const int velocidadFrenoCurva = 40;
 const int velocidadFrenoAfuera = 0;
+
+// parámetros PID
+const float kPRecta = 1.0 / 7.0;
+const float kDRecta = 50.0;
+const float kPCurva = 1.0 / 7.0;
+const float kDCurva = 25.0;
+//const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
 const int cantidadDeSegmentos = 8;
@@ -33,8 +40,8 @@ const int usarDistancias = 1;
 const int ignorarDistancias = 2;
 // determina si se graban los valores en la EEPROM, si se usan para controlar
 // la velocidad de recta y curva, o si se ignoran
-const int modoUsoDistancias = usarDistancias;
-int cantidadDeVueltasADar = 2; // en aprendizaje, se frena al terminar
+const int modoUsoDistancias = ignorarDistancias;
+const int cantidadDeVueltasADar = 2; // en aprendizaje, se frena al terminar
 const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
 bool usarCarrilIzquierdo = false;
 
@@ -54,13 +61,6 @@ const int R = rangoVelocidadRecta;
 const int C = rangoVelocidadCurva;
 const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
 const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
-
-// parámetros PID
-const float kPRecta = 1.0 / 7.0;
-const float kDRecta = 50.0;
-const float kPCurva = 1.0 / 7.0;
-const float kDCurva = 40.0;
-//const float kI = 1.0 / 2500.0;
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
@@ -408,7 +408,8 @@ void loop() {
   int indiceSegmento = 0; // almacena el indice de segmento de la pista
   int distanciaActual = 0;
   int distanciaEsperada = 0;
-
+  int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
+  
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
   if (usarVelocidadPorTramo) {
@@ -588,8 +589,8 @@ void loop() {
         
         if (modoUsoDistancias == aprenderDistancias) {
           if (indiceSegmento == 0) {
-            cantidadDeVueltasADar--;
-            if (cantidadDeVueltasADar <= 0) {
+            cantidadDeVueltasRestantes--;
+            if (cantidadDeVueltasRestantes <= 0) {
               apagarMotores();
               guardarDistanciasEnEEPROM();
               break;
