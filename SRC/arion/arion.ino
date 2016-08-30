@@ -5,8 +5,8 @@
 /** inicio de parámetros configurables **/
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
+// const bool DEBUG = false;
 const bool DEBUG = false;
-//const bool DEBUG = true;
 
 // parámetros para estadoActualAdentro,
 // determina si se debe clampear los valores de sensoresLinea en el PID
@@ -102,25 +102,27 @@ const int centroDeLinea = 3000;
 /** fin de parámetros configurables **/
 
 
-// definición de pines del micro.
-const int pwmMotorD = 11;
-const int pwmMotorI = 10;
-const int sentidoMotorD = 3;
-const int sentidoMotorI = 5;
-const int ledArduino = 13;
-const int led1 = 9;
-const int led2 = 8;
-const int led3 = 12;
-const int boton1 = 7;
-const int boton2 = 4; // es el pin 6, ahora usado por un encoder
-const int boton3 = 4;
-const int sensor0 = A0;
-const int sensor1 = A1;
-const int sensor2 = A2;
-const int sensor3 = A3;
-const int sensor4 = A5;
-const int batteryControl = A4;
-const int sensorCurva = A6;
+// definición de pines del micro. para Arión 2016 LNR
+const int pwmMotorD = 9; // OC1A
+const int pwmMotorI = 10; // OC1B
+const int sentidoMotorD = 5;
+const int sentidoMotorI = 6;
+// const int ledArduino = 13;
+const int led1 = 11;  // Led 1
+const int led2 = 12;  // Led 2
+const int led3 = 12;  // Led 3
+const int boton3 = 8; // Boton1(pcb)   boton3 (code): Calibrar
+const int boton1 = 7; // Boton2(pcb)   boton1 (code): Arrancar
+// const int boton3 = 4; // Boton extra no esta mapeado en arduino
+const int boton2 = 1 ;// pin 1 arduino  - pin 31(avr)
+const int sensor0 = A0; // sensor0 (code)   sensor2(pcb) izquierda  [izq]
+const int sensor1 = A1; // cenIzq           sensor3(pcb)
+const int sensor2 = A2; // cen              sensor4(pcb)
+const int sensor3 = A3; // cenDer           sensor5(pcb)
+const int sensor4 = A4; // der              sensor6(pcb)
+const int batteryControl = A6; // not confirmed
+const int sensorCurva = A7;  //             sensor1(pcb)
+const int habilitador = 4; // PD4
 
 // armado de array de sensores y arrays para calibración
 const int cantidadDeSensores = 6;
@@ -174,6 +176,8 @@ void setup() {
   // pinMode(pwmMotorD, OUTPUT);
   // pinMode(pwmMotorI, OUTPUT);
 
+  digitalWrite(habilitador, HIGH);
+
   pinMode(sentidoMotorD, OUTPUT);
   pinMode(sentidoMotorI, OUTPUT);
 
@@ -187,10 +191,11 @@ void setup() {
   //pinMode(batteryControl, INPUT);
   pinMode(sensorCurva, INPUT);
 
-  pinMode(ledArduino, OUTPUT);
+  // pinMode(ledArduino, OUTPUT);
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
   pinMode(led3, OUTPUT);
+  pinMode(habilitador, OUTPUT);
 
   pinMode(boton1, INPUT);
   pinMode(boton2, INPUT);
@@ -205,7 +210,7 @@ void setup() {
   //clearBit(ADCSRA, ADPS0);
 
   // habilita interrupciones globales
-  // NOTA: Arduino deshabilita y habilita interrupciones cuando quiere leer 
+  // NOTA: Arduino deshabilita y habilita interrupciones cuando quiere leer
   // los valores de millis() y micros().
   sei();
 
@@ -244,7 +249,7 @@ void setup() {
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
   digitalWrite(led3, LOW);
-  digitalWrite(ledArduino, LOW);
+  // digitalWrite(ledArduino, LOW);
   apagarMotores();
 
   // Reseteo el valor del encoder
@@ -363,9 +368,9 @@ inline void chequearBateriaBloqueante() {
     }
     esperarReboteBoton();
 
-    // luego de apretar el botón 
+    // luego de apretar el botón
     minimoValorBateria -= 10;
-    
+
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
     digitalWrite(led3, LOW);
@@ -409,7 +414,7 @@ void loop() {
   int distanciaActual = 0;
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
-  
+
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
   if (usarVelocidadPorTramo) {
@@ -430,11 +435,11 @@ void loop() {
   // hasta que se presione el botón, espera
   while (!apretado(boton1)) {
     chequearBateriaBloqueante();
-    
+
     obtenerSensoresCalibrados();
     mostrarSensoresPorSerie();
     // mostrarSensorLEDs(cen);
-    
+
     // carga opcional de información de encoders
     if (modoUsoDistancias == usarDistancias) {
       leerDistanciasDeEEPROM();
@@ -448,7 +453,7 @@ void loop() {
       digitalWrite(led1, LOW);
       digitalWrite(led2, HIGH);
     }
-    
+
     // calibración usando el botón
     calibracionReseteada = false;
     while (apretado(boton3)) {
@@ -459,7 +464,7 @@ void loop() {
           maximosSensores[i] = 0;
         }
         calibracionReseteada = true;
-        // reuso la bandera de calibracionReseteada para que esto se ejecute 
+        // reuso la bandera de calibracionReseteada para que esto se ejecute
         // una sola vez por apretada de botón
         usarCarrilIzquierdo = !usarCarrilIzquierdo;
       }
@@ -471,13 +476,13 @@ void loop() {
       digitalWrite(led3, LOW);
       delay(50);
     }
-    
+
   }
   esperarReboteBoton();
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
   digitalWrite(led3, LOW);
-  digitalWrite(ledArduino, LOW);
+  // digitalWrite(ledArduino, LOW);
 
   // hasta que se suelte el botón, espera
   while (apretado(boton1));
@@ -510,7 +515,7 @@ void loop() {
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
-    
+
     //chequearBateria();
     obtenerSensoresCalibrados();
 
@@ -558,7 +563,7 @@ void loop() {
       (long)sensores[cenDer] +
       (long)sensores[der]
     );
-    
+
     // clampea valor extremo para indicarle al PID
     // que corrija con toda su fuerza
     if (estadoActualAdentro == false) {
@@ -579,14 +584,14 @@ void loop() {
           distanciasRuedaIzquierda[indiceSegmento] = contadorMotorIzquierdo;
           distanciasRuedaDerecha[indiceSegmento] = contadorMotorDerecho;
         }
-        
+
         // indice usado para identificar el segmento
         indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
-        
+
         // Reseteo el valor del encoder
         contadorMotorIzquierdo = 0;
         contadorMotorDerecho = 0;
-        
+
         if (modoUsoDistancias == aprenderDistancias) {
           if (indiceSegmento == 0) {
             cantidadDeVueltasRestantes--;
@@ -732,9 +737,12 @@ void loop() {
       tiempoUs = micros() - ultimoTiempoUs;
       debug("%.4i ", tiempoUs);
       debug("%.4i ", rangoVelocidad);
-      debug("%.4i ", velocidadMotorFrenado);
-      debug("%.4lu ", contadorMotorIzquierdo);
-      debug("%.4lu\n", contadorMotorDerecho);
+      debug("%.4i ", sensoresLinea);
+      debug("%.4i\n", velocidadMotorFrenado);
+
+      // debug("%.4i ", velocidadMotorFrenado);
+      // debug("%.4lu ", contadorMotorIzquierdo);
+      // debug("%.4lu\n", contadorMotorDerecho);
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
@@ -803,14 +811,14 @@ long leerLongDeEEPROM(int posicion) {
 
 void guardarDistanciasEnEEPROM() {
   int posicion = 0;
-  
-  // las distancias del carril derecho se guardan después de todas las del 
+
+  // las distancias del carril derecho se guardan después de todas las del
   // carril izquierdo
   if (!usarCarrilIzquierdo) {
     // cada segmento usa 2 bytes por rueda
     posicion = cantidadDeSegmentos * 4;
   }
-  
+
   for (int i = 0; i < cantidadDeSegmentos; i++) {
     guardarLongEnEEPROM(distanciasRuedaIzquierda[i], posicion);
     posicion = posicion + 2;
@@ -820,14 +828,14 @@ void guardarDistanciasEnEEPROM() {
 }
 void leerDistanciasDeEEPROM() {
   int posicion = 0;
-  
-  // las distancias del carril derecho se guardan después de todas las del 
+
+  // las distancias del carril derecho se guardan después de todas las del
   // carril izquierdo
   if (!usarCarrilIzquierdo) {
     // cada segmento usa 2 bytes por rueda
     posicion = cantidadDeSegmentos * 4;
   }
-  
+
   for (int i = 0; i < cantidadDeSegmentos; i++) {
     distanciasRuedaIzquierda[i] = leerLongDeEEPROM(posicion);
     posicion = posicion + 2;
