@@ -14,27 +14,27 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 110; // velocidad real = rango - freno / 2
-const int rangoVelocidadCurva = 110; //
+const int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
+const int rangoVelocidadCurva = 70; //
 const int rangoVelocidadAfuera = 0;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFrenoRecta = 40;
-const int velocidadFrenoCurva = 40;
+const int velocidadFrenoRecta = 255;
+const int velocidadFrenoCurva = 70;
 const int velocidadFrenoAfuera = 0;
 
 // parámetros PID
-const float kPRecta = 1.0 / 7.0;
-const float kDRecta = 50.0;
-const float kPCurva = 1.0 / 7.0;
-const float kDCurva = 25.0;
+const float kPRecta = 1.0 / 12.0;
+const float kDRecta = 7.0;
+const float kPCurva = 1.0 / 12.0;
+const float kDCurva = 4.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
 const int cantidadDeSegmentos = 8;
 // Arrays donde se guardan las distancias medidas por los encoders
-unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
-unsigned long distanciasRuedaDerecha[cantidadDeSegmentos] = {};
+unsigned int distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
+unsigned int distanciasRuedaDerecha[cantidadDeSegmentos] = {};
 const int aprenderDistancias = 0;
 const int usarDistancias = 1;
 const int ignorarDistancias = 2;
@@ -108,13 +108,12 @@ const int pwmMotorI = 10; // OC1B
 const int sentidoMotorD = 5;
 const int sentidoMotorI = 6;
 // const int ledArduino = 13;
-const int led1 = 11;  // Led 1
-const int led2 = 12;  // Led 2
-const int led3 = 12;  // Led 3
-const int boton3 = 8; // Boton1(pcb)   boton3 (code): Calibrar
+const int led1 = 12;  // Led 1
+const int led2 = 13;  // Led 2
+const int led3 = 11;  // Led 3
 const int boton1 = 7; // Boton2(pcb)   boton1 (code): Arrancar
-// const int boton3 = 4; // Boton extra no esta mapeado en arduino
-const int boton2 = 1 ;// pin 1 arduino  - pin 31(avr)
+const int boton2 = 8; // pin 1 arduino  - pin 31(avr)
+const int boton3 = 8; // Boton1(pcb)   boton3 (code): Calibrar
 const int sensor0 = A0; // sensor0 (code)   sensor2(pcb) izquierda  [izq]
 const int sensor1 = A1; // cenIzq           sensor3(pcb)
 const int sensor2 = A2; // cen              sensor4(pcb)
@@ -157,8 +156,8 @@ const int derecha = 1;
 const int izquierda = 0;
 
 // contadores de encoders
-volatile unsigned long contadorMotorIzquierdo = 0;
-volatile unsigned long contadorMotorDerecho = 0;
+volatile unsigned int contadorMotorIzquierdo = 0;
+volatile unsigned int contadorMotorDerecho = 0;
 
 // macro y string de debug por puerto serie
 char debug_string_buffer[20];
@@ -169,6 +168,15 @@ char debug_string_buffer[20];
 #define clearBit(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define setBit(sfr, bit)   (_SFR_BYTE(sfr) |=  _BV(bit))
 #define EEPROM_LENGTH 1024 // el ATmega328 tiene 1KB de EEPROM
+
+#define led1On() digitalWrite(led1, LOW)
+#define led2On() digitalWrite(led2, LOW)
+#define led3On() digitalWrite(led3, LOW)
+#define led1Off() digitalWrite(led1, HIGH)
+#define led2Off() digitalWrite(led2, HIGH)
+#define led3Off() digitalWrite(led3, HIGH)
+
+#define SERIAL_BPS 115200
 
 void setup() {
   // como los motores se manejan con AnalogWrite,
@@ -201,7 +209,7 @@ void setup() {
   pinMode(boton2, INPUT);
   pinMode(boton3, INPUT);
 
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BPS);
 
   // pone el prescaler del ADC Clock en 16
   // esto reduce el tiempo de cada conversión AD de ~112us a ~20us
@@ -245,10 +253,11 @@ void setup() {
     }
     inicializarCalibracionInicial = false;
   }
+  leerCalibracionDeEEPROM();
 
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
-  digitalWrite(led3, LOW);
+  led1Off();
+  led2Off();
+  led3Off();
   // digitalWrite(ledArduino, LOW);
   apagarMotores();
 
@@ -323,12 +332,14 @@ void mostrarSensoresPorSerie() {
   debug("%.4d ", sensores[cenDer]);
   debug("%.4d ", sensores[der]);
   debug("%.4d ", sensores[curva]);
-  debug("%.4lu ", contadorMotorIzquierdo);
-  debug("%.4lu ", contadorMotorDerecho);
-  debug("%s ", "|");
-  for (int i = 0; i < cantidadDeSegmentos; i++) {
-    debug("{%lu, ", distanciasRuedaIzquierda[i]);
-    debug("%lu} ", distanciasRuedaDerecha[i]);
+  debug("%.4d ", contadorMotorIzquierdo);
+  debug("%.4d ", contadorMotorDerecho);
+  if (modoUsoDistancias == usarDistancias) {
+    debug("%s ", "|");
+    for (int i = 0; i < cantidadDeSegmentos; i++) {
+      debug("{%d, ", distanciasRuedaIzquierda[i]);
+      debug("%d} ", distanciasRuedaDerecha[i]);
+    }
   }
   debug("%s", "\n");
 }
@@ -342,13 +353,13 @@ void apagarMotores() {
 
 inline void chequearBateria() {
   if (analogRead(batteryControl) < minimoValorBateria) {
-    digitalWrite(led1, HIGH);
-    digitalWrite(led2, HIGH);
-    digitalWrite(led3, HIGH);
+    led1On();
+    led2On();
+    led3On();
   } else {
-    digitalWrite(led1, LOW);
-    digitalWrite(led2, LOW);
-    digitalWrite(led3, LOW);
+    led1Off();
+    led2Off();
+    led3Off();
   }
 }
 
@@ -357,13 +368,13 @@ inline void chequearBateriaBloqueante() {
     // si la batería está por debajo del mínimo, parpadea LEDs
     // hasta que se aprieta el botón
     while (!apretado(boton2)) {
-      digitalWrite(led1, HIGH);
-      digitalWrite(led2, HIGH);
-      digitalWrite(led3, HIGH);
+      led1On();
+      led2On();
+      led3On();
       delay(200);
-      digitalWrite(led1, LOW);
-      digitalWrite(led2, LOW);
-      digitalWrite(led3, LOW);
+      led1Off();
+      led2Off();
+      led3Off();
       delay(200);
     }
     esperarReboteBoton();
@@ -371,9 +382,9 @@ inline void chequearBateriaBloqueante() {
     // luego de apretar el botón
     minimoValorBateria -= 10;
 
-    digitalWrite(led1, LOW);
-    digitalWrite(led2, LOW);
-    digitalWrite(led3, LOW);
+    led1Off();
+    led2Off();
+    led3Off();
 
     // hasta que se suelte el botón, espera
     while (apretado(boton2));
@@ -382,6 +393,7 @@ inline void chequearBateriaBloqueante() {
 }
 
 void loop() {
+  
   // definición de variables locales
   float errP = 0;
   float errPAnterior = 0;
@@ -436,9 +448,13 @@ void loop() {
   while (!apretado(boton1)) {
     chequearBateriaBloqueante();
 
+    //digitalWrite(habilitador, HIGH);
+    //delayMicroseconds(100);
     obtenerSensoresCalibrados();
     mostrarSensoresPorSerie();
     // mostrarSensorLEDs(cen);
+    //digitalWrite(habilitador, LOW);
+    //delay(100);
 
     // carga opcional de información de encoders
     if (modoUsoDistancias == usarDistancias) {
@@ -447,11 +463,11 @@ void loop() {
 
     // muestra estado de encoders
     if (usarCarrilIzquierdo) {
-      digitalWrite(led1, HIGH);
-      digitalWrite(led2, LOW);
+      led1On();
+      led2Off();
     } else {
-      digitalWrite(led1, LOW);
-      digitalWrite(led2, HIGH);
+      led1Off();
+      led2On();
     }
 
     // calibración usando el botón
@@ -464,24 +480,28 @@ void loop() {
           maximosSensores[i] = 0;
         }
         calibracionReseteada = true;
+        //digitalWrite(habilitador, HIGH);
+        //delay(1);
+        
         // reuso la bandera de calibracionReseteada para que esto se ejecute
         // una sola vez por apretada de botón
         usarCarrilIzquierdo = !usarCarrilIzquierdo;
       }
 
-      digitalWrite(led1, HIGH);
+      led1On();
       calibrarSensores();
-      digitalWrite(led1, LOW);
-      digitalWrite(led2, LOW);
-      digitalWrite(led3, LOW);
+      guardarCalibracionEnEEPROM();
+      led1Off();
+      led2Off();
+      led3Off();
       delay(50);
     }
 
   }
   esperarReboteBoton();
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
-  digitalWrite(led3, LOW);
+  led1Off();
+  led2Off();
+  led3Off();
   // digitalWrite(ledArduino, LOW);
 
   // hasta que se suelte el botón, espera
@@ -532,18 +552,18 @@ void loop() {
       if ( ((sensores[izq]  < tolerancia) && (sensores[der] < toleranciaBorde) ) ||
            ((sensores[izq]  < toleranciaBorde) && (sensores[der] < tolerancia) ) ) {
         estadoActualAdentro = false;
-        //digitalWrite(led3, HIGH);
+        //led3On();
         if (estadoActualAdentro != ultimoEstadoActualAdentro) {
           //frenarMotores();
         }
       } else {
-        //digitalWrite(led3, LOW);
+        //led3Off();
         estadoActualAdentro = true;
       }
 
     } else {
       estadoActualAdentro = true;
-      //digitalWrite(led3, LOW);
+      //led3Off();
     }
     ultimoEstadoActualAdentro = estadoActualAdentro;
 
@@ -626,8 +646,8 @@ void loop() {
       if (usarVelocidadPorTramo) {
         rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
       }
-      digitalWrite(led2, LOW);
-      digitalWrite(led3, LOW);
+      led2Off();
+      led3Off();
     } else {
       kP = kPRecta;
       kD = kDRecta;
@@ -636,9 +656,9 @@ void loop() {
       if (usarTiemposPorRecta) {
         if (millis() - ultimoTiempoRecta > tiempoAMaxVelocidadRecta[contadorRecta]) {
           rangoVelocidad = rangoVelocidadCurva;
-          digitalWrite(led3, HIGH);
+          led3On();
         } else {
-          digitalWrite(led3, LOW);
+          led3Off();
         }
       }
       if (modoUsoDistancias == usarDistancias) {
@@ -647,20 +667,20 @@ void loop() {
         if (distanciaActual + distanciaAnticipoCurva > distanciaEsperada) {
           rangoVelocidad = rangoVelocidadAfuera; // velocidad Afuera es más lenta
           //velocidadFreno = velocidadFrenoRecta; // con freno curva cabecea mucho
-          digitalWrite(led3, HIGH);
+          led3On();
         } else {
-          digitalWrite(led3, LOW);
+          led3Off();
         }
       }
-      digitalWrite(led2, HIGH);
+      led2On();
     }
 
     if (estadoActualAdentro == false) {
       rangoVelocidad = rangoVelocidadAfuera;
       velocidadFreno = velocidadFrenoAfuera;
-      digitalWrite(led1, HIGH);
+      led1On();
     } else {
-      digitalWrite(led1, LOW);
+      led1Off();
     }
 
     // aplico el coeficiente de compensación de tensión de la batería
@@ -767,7 +787,7 @@ void loop() {
 }
 
 inline void frenarMotores() {
-  digitalWrite(led1, HIGH);
+  led1On();
 
   // pone los motores para atrás a la velocidad del parámetro y espera
   digitalWrite(sentidoMotorI, atras);
@@ -783,7 +803,7 @@ inline void frenarMotores() {
   analogWrite(pwmMotorI, 0);
   analogWrite(pwmMotorD, 0);
 
-  digitalWrite(led1, LOW);
+  led1Off();
 }
 
 // handler para PCINT22
@@ -795,13 +815,13 @@ ISR(INT0_vect) {
   contadorMotorDerecho++;
 }
 
-void guardarLongEnEEPROM(long valor, int posicion) {
+void guardarIntEnEEPROM(long valor, int posicion) {
   uint8_t low = valor & 0xFF;
   uint8_t high = valor >> 8;
   EEPROM.write(posicion, low);
   EEPROM.write(posicion + 1, high);
 }
-long leerLongDeEEPROM(int posicion) {
+long leerIntDeEEPROM(int posicion) {
   uint8_t low;
   uint8_t high;
   low = EEPROM.read(posicion);
@@ -820,9 +840,9 @@ void guardarDistanciasEnEEPROM() {
   }
 
   for (int i = 0; i < cantidadDeSegmentos; i++) {
-    guardarLongEnEEPROM(distanciasRuedaIzquierda[i], posicion);
+    guardarIntEnEEPROM(distanciasRuedaIzquierda[i], posicion);
     posicion = posicion + 2;
-    guardarLongEnEEPROM(distanciasRuedaDerecha[i], posicion);
+    guardarIntEnEEPROM(distanciasRuedaDerecha[i], posicion);
     posicion = posicion + 2;
   }
 }
@@ -837,9 +857,37 @@ void leerDistanciasDeEEPROM() {
   }
 
   for (int i = 0; i < cantidadDeSegmentos; i++) {
-    distanciasRuedaIzquierda[i] = leerLongDeEEPROM(posicion);
+    distanciasRuedaIzquierda[i] = leerIntDeEEPROM(posicion);
     posicion = posicion + 2;
-    distanciasRuedaDerecha[i] = leerLongDeEEPROM(posicion);
+    distanciasRuedaDerecha[i] = leerIntDeEEPROM(posicion);
     posicion = posicion + 2;
+  }
+}
+
+void guardarCalibracionEnEEPROM() {
+  // cada segmento usa 2 bytes por rueda, por la cantiadd de segmentos,
+  // para los dos carriles
+  int posicion = cantidadDeSegmentos * 2 * 4;
+  
+  // leo los sensores, y guardo los mínimos y los máximos
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    guardarIntEnEEPROM(minimosSensores[i], posicion);
+    posicion = posicion + 2;
+    guardarIntEnEEPROM(maximosSensores[i], posicion);
+    posicion = posicion + 2;
+  }
+}
+void leerCalibracionDeEEPROM() {
+  // cada segmento usa 2 bytes por rueda, por la cantiadd de segmentos,
+  // para los dos carriles
+  int posicion = cantidadDeSegmentos * 2 * 4;
+
+  // leo los sensores, y guardo los mínimos y los máximos
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    minimosSensores[i] = leerIntDeEEPROM(posicion);
+    posicion = posicion + 2;
+    maximosSensores[i] = leerIntDeEEPROM(posicion);
+    posicion = posicion + 2;
+    coeficientesSensores[i] = 1023.0 / (float)(maximosSensores[i] - minimosSensores[i]);
   }
 }
