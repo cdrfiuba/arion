@@ -19,13 +19,13 @@ const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos 
 // 859: 200, 95, 150, 45
 const int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
 const int rangoVelocidadRectaLenta = 95;
-const int rangoVelocidadCurva = 100;
-const int rangoVelocidadAfuera = 30;
+const int rangoVelocidadCurva = 130;
+const int rangoVelocidadAfuera = 0;
 const int tiempoDeFrenoPorDistancia = 700; // ms
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
 const int velocidadFrenoRecta = 255;
-const int velocidadFrenoCurva = 255;
+const int velocidadFrenoCurva = 60;
 const int velocidadFrenoAfuera = 0;
 
 // parámetros PID
@@ -33,8 +33,8 @@ const float kPRecta = 1.0 / 12.0;
 const float kDRecta = 7.0;
 const float kPRectaLenta = 1.0 / 7.0;
 const float kDRectaLenta = 200.0;
-const float kPCurva = 1.0 / 12.0;
-const float kDCurva = 10.0;
+const float kPCurva = 1.0 / 2.0;
+const float kDCurva = 30.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
@@ -493,6 +493,13 @@ void loop() {
   while (apretado(boton1));
   esperarReboteBoton();
 
+  // calculo el coeficiente de la batería según la carga que tenga ahora
+  if (usarTensionCompensadaBateria) {
+    coeficienteBateria = MAXIMO_VALOR_BATERIA / analogRead(batteryControl);
+  } else {
+    coeficienteBateria = 1.0;
+  }
+
   // seteo de rangoVelocidad para arranque gradual
   if (modoCurva) {
     rangoVelocidad = rangoVelocidadCurva;
@@ -505,13 +512,6 @@ void loop() {
     analogWrite(pwmMotorD, i * 10);
     analogWrite(pwmMotorI, i * 10);
     delay(10);
-  }
-
-  // calculo el coeficiente de la batería según la carga que tenga ahora
-  if (usarTensionCompensadaBateria) {
-    coeficienteBateria = MAXIMO_VALOR_BATERIA / analogRead(batteryControl);
-  } else {
-    coeficienteBateria = 1.0;
   }
 
   // inicialización tiempos
