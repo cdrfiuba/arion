@@ -14,20 +14,20 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-const int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
-const int rangoVelocidadCurva = 70; //
-const int rangoVelocidadAfuera = 0;
+int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
+int rangoVelocidadCurva = 70;
+int rangoVelocidadAfuera = 0;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFrenoRecta = 255;
-const int velocidadFrenoCurva = 70;
-const int velocidadFrenoAfuera = 0;
+int velocidadFrenoRecta = 255;
+int velocidadFrenoCurva = 70;
+int velocidadFrenoAfuera = 0;
 
 // parámetros PID
-const float kPRecta = 1.0 / 12.0;
-const float kDRecta = 7.0;
-const float kPCurva = 1.0 / 12.0;
-const float kDCurva = 4.0;
+float kPRecta = 0.08;
+float kDRecta = 7.0;
+float kPCurva = 0.08;
+float kDCurva = 4.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
@@ -59,8 +59,8 @@ const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0,
 const bool usarVelocidadPorTramo = false;
 const int R = rangoVelocidadRecta;
 const int C = rangoVelocidadCurva;
-const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
-const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
+const int velocidadesCurvaCI[cantidadDeRectas] = {R+00, C+00, R+00, C+00};
+const int velocidadesCurvaCD[cantidadDeRectas] = {R+00, C+00, R+00, C+00};
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
@@ -87,7 +87,6 @@ const int tiempoCicloReferencia = 1040;//390;
 // 7.50 V => 771 // armado con regla de 3
 const int MINIMO_VALOR_BATERIA = 760;
 int minimoValorBateria = MINIMO_VALOR_BATERIA; // permite modificarlo en caso de emergencia
-const bool usarTensionCompensadaBateria = false;
 const int MAXIMO_VALOR_BATERIA = 859; // = 8.4V / 2 (divisor resistivo) * 1023.0 / 5V
 
 // parámetros para promedio ponderado de sensoresLinea
@@ -160,7 +159,7 @@ volatile unsigned int contadorMotorIzquierdo = 0;
 volatile unsigned int contadorMotorDerecho = 0;
 
 // macro y string de debug por puerto serie
-char debug_string_buffer[20];
+char debug_string_buffer[30];
 #define debug(formato, valor) \
   sprintf(debug_string_buffer, formato, valor); \
   Serial.print(debug_string_buffer);
@@ -183,8 +182,6 @@ void setup() {
   // no hace falta ponerlos como salida
   // pinMode(pwmMotorD, OUTPUT);
   // pinMode(pwmMotorI, OUTPUT);
-
-  digitalWrite(habilitador, HIGH);
 
   pinMode(sentidoMotorD, OUTPUT);
   pinMode(sentidoMotorI, OUTPUT);
@@ -255,6 +252,7 @@ void setup() {
   }
   leerCalibracionDeEEPROM();
 
+  digitalWrite(habilitador, HIGH);
   led1Off();
   led2Off();
   led3Off();
@@ -392,8 +390,109 @@ inline void chequearBateriaBloqueante() {
   }
 }
 
+#define readString(data, a, b, c) (data[0] == a && data[1] == b && data[2] == c)
+void leerVariablesDeSerie() {
+  char b[] = {0, 0, 0};
+  int nuevoValorInt = 0;
+  float nuevoValorFloat = 0.0;
+  if (Serial.available()) {
+    b[0] = Serial.read();
+    b[1] = Serial.read();
+    b[2] = Serial.read();
+    Serial.setTimeout(10); // timeout para parseInt
+    if (b[0] == 0 || b[1] == 0 || b[2] == 0) {
+      // no hacer nada
+      
+    // Rango Velocidad, Recta Curva Afuera
+    } else if (readString(b, 'r', 'v', 'r')) {
+      nuevoValorInt = Serial.parseInt();
+      Serial.print("rangoVelocidadRecta = ");
+      rangoVelocidadRecta = nuevoValorInt;
+      Serial.println(nuevoValorInt);
+      delay(2000);
+    } else if (readString(b, 'r', 'v', 'c')) {
+      nuevoValorInt = Serial.parseInt();
+      Serial.print("rangoVelocidadCurva = ");
+      rangoVelocidadCurva = nuevoValorInt;
+      Serial.println(nuevoValorInt);
+      delay(2000);
+    } else if (readString(b, 'r', 'v', 'a')) {
+      nuevoValorInt = Serial.parseInt();
+      Serial.print("rangoVelocidadAfuera = ");
+      rangoVelocidadAfuera = nuevoValorInt;
+      Serial.println(nuevoValorInt);
+      delay(2000);
+
+    // Velocidad Freno, Recta Curva Afuera
+    } else if (readString(b, 'v', 'f', 'r')) {
+      nuevoValorInt = Serial.parseInt();
+      Serial.print("velocidadFrenoRecta = ");
+      velocidadFrenoRecta = nuevoValorInt;
+      Serial.println(nuevoValorInt);
+      delay(2000);
+    } else if (readString(b, 'v', 'f', 'c')) {
+      nuevoValorInt = Serial.parseInt();
+      Serial.print("velocidadFrenoCurva = ");
+      velocidadFrenoCurva = nuevoValorInt;
+      Serial.println(nuevoValorInt);
+      delay(2000);
+    } else if (readString(b, 'v', 'f', 'a')) {
+      nuevoValorInt = Serial.parseInt();
+      Serial.print("velocidadFrenoAfuera = ");
+      velocidadFrenoAfuera = nuevoValorInt;
+      Serial.println(nuevoValorInt);
+      delay(2000);
+
+    // k P Recta, P Curva, D Recta, D Curva
+    } else if (readString(b, 'k', 'p', 'r')) {
+      nuevoValorFloat = Serial.parseFloat();
+      Serial.print("kPRecta = ");
+      kPRecta = nuevoValorFloat;
+      Serial.println(nuevoValorFloat);
+      delay(2000);
+    } else if (readString(b, 'k', 'd', 'r')) {
+      nuevoValorFloat = Serial.parseFloat();
+      Serial.print("kDRecta = ");
+      kDRecta = nuevoValorFloat;
+      Serial.println(nuevoValorFloat);
+      delay(2000);
+    } else if (readString(b, 'k', 'p', 'c')) {
+      nuevoValorFloat = Serial.parseFloat();
+      Serial.print("kPCurva = ");
+      kPCurva = nuevoValorFloat;
+      Serial.println(nuevoValorFloat);
+      delay(2000);
+    } else if (readString(b, 'k', 'd', 'c')) {
+      nuevoValorFloat = Serial.parseFloat();
+      Serial.print("kDCurva = ");
+      kDCurva = nuevoValorFloat;
+      Serial.println(nuevoValorFloat);
+      delay(2000);
+
+    // k P Recta, P Curva, D Recta, D Curva
+    } else if (readString(b, 'd', 'l', 'd')) {
+      Serial.println("te canto los datos:");
+      // rangos velocidad
+      debug("rangoVelocidadRecta = %d\n", rangoVelocidadRecta);
+      debug("rangoVelocidadCurva = %d\n", rangoVelocidadCurva);
+      debug("rangoVelocidadAfuera = %d\n", rangoVelocidadAfuera);
+
+      // velocidades freno
+      debug("velocidadFrenoRecta = %d\n", velocidadFrenoRecta);
+      debug("velocidadFrenoCurva = %d\n", velocidadFrenoCurva);
+      debug("velocidadFrenoAfuera = %d\n", velocidadFrenoAfuera);
+
+      // los floats no andan con sprintf, por lo que uso println
+      debug("%s", "kPRecta = "); Serial.println(kPRecta);
+      debug("%s", "kDRecta = "); Serial.println(kDRecta);
+      debug("%s", "kPCurva = "); Serial.println(kPCurva);
+      debug("%s", "kDCurva = "); Serial.println(kDCurva);
+      delay(5000);
+    }
+  }
+}
+
 void loop() {
-  
   // definición de variables locales
   float errP = 0;
   float errPAnterior = 0;
@@ -421,7 +520,6 @@ void loop() {
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
-  float coeficienteBateria;
   int indiceSegmento = 0; // almacena el indice de segmento de la pista
   int distanciaActual = 0;
   int distanciaEsperada = 0;
@@ -446,6 +544,7 @@ void loop() {
 
   // hasta que se presione el botón, espera
   while (!apretado(boton1)) {
+    leerVariablesDeSerie();
     chequearBateriaBloqueante();
 
     //digitalWrite(habilitador, HIGH);
@@ -520,13 +619,6 @@ void loop() {
     analogWrite(pwmMotorD, i * 10);
     analogWrite(pwmMotorI, i * 10);
     delay(10);
-  }
-
-  // calculo el coeficiente de la batería según la carga que tenga ahora
-  if (usarTensionCompensadaBateria) {
-    coeficienteBateria = MAXIMO_VALOR_BATERIA / analogRead(batteryControl);
-  } else {
-    coeficienteBateria = 1.0;
   }
 
   // inicialización tiempos
@@ -683,18 +775,6 @@ void loop() {
       led1Off();
     }
 
-    // aplico el coeficiente de compensación de tensión de la batería
-    if (usarTensionCompensadaBateria) {
-      rangoVelocidad = rangoVelocidad * coeficienteBateria;
-      velocidadFreno = velocidadFreno * coeficienteBateria;
-      if (rangoVelocidad > 255) {
-        rangoVelocidad = 255;
-      }
-      if (velocidadFreno > 255) {
-        velocidadFreno = 255;
-      }
-    }
-
     // 20 microsegundos
     errP = sensoresLinea - centroDeLinea;
     // errI += errP * tiempoCicloReferencia / tiempoUs;
@@ -815,13 +895,13 @@ ISR(INT0_vect) {
   contadorMotorDerecho++;
 }
 
-void guardarIntEnEEPROM(long valor, int posicion) {
+void guardarIntEnEEPROM(int valor, int posicion) {
   uint8_t low = valor & 0xFF;
   uint8_t high = valor >> 8;
   EEPROM.write(posicion, low);
   EEPROM.write(posicion + 1, high);
 }
-long leerIntDeEEPROM(int posicion) {
+int leerIntDeEEPROM(int posicion) {
   uint8_t low;
   uint8_t high;
   low = EEPROM.read(posicion);
