@@ -18,36 +18,41 @@ const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos 
 // 839: 210, 100, 155, 45
 // 859: 200, 95, 150, 45
 const int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
-const int rangoVelocidadRectaLenta = 95;
-const int rangoVelocidadCurva = 130;
+const int rangoVelocidadRectaLenta = 50;
+const int rangoVelocidadCurva = 70;
 const int rangoVelocidadAfuera = 0;
-const int tiempoDeFrenoPorDistancia = 700; // ms
+const int tiempoDeFrenoPorDistancia = 30000; // ms
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
 const int velocidadFrenoRecta = 255;
-const int velocidadFrenoCurva = 60;
+const int velocidadFrenoCurva = 200;
 const int velocidadFrenoAfuera = 0;
 
 // parámetros PID
-const float kPRecta = 1.0 / 12.0;
+const float kPRecta = 0.08;
 const float kDRecta = 7.0;
-const float kPRectaLenta = 1.0 / 7.0;
-const float kDRectaLenta = 200.0;
-const float kPCurva = 1.0 / 2.0;
-const float kDCurva = 30.0;
+const float kPRectaLenta = 0.08;
+const float kDRectaLenta = 7.0;
+const float kPCurva = 0.08;
+const float kDCurva = 4.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
-const int cantidadDeSegmentos = 8;
+const int cantidadDeSegmentos = 9;
 // Arrays donde se guardan las distancias medidas por los encoders
-unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
-unsigned long distanciasRuedaDerecha[cantidadDeSegmentos] = {};
+unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {
+  741, 2291, 1503, 2291, 982, 536, 2071, 2560, 2000
+};
+unsigned long distanciasRuedaDerecha[cantidadDeSegmentos] = {
+  749, 2517, 1541, 2130, 1004, 418, 2229, 2556, 2000
+};
 const int aprenderDistancias = 0;
 const int usarDistancias = 1;
 const int ignorarDistancias = 2;
+const int usarDistanciasManuales = 3; // usa distancias del array en RAM en vez de EEPROM
 // determina si se graban los valores en la EEPROM, si se usan para controlar
 // la velocidad de recta y curva, o si se ignoran
-const int modoUsoDistancias = usarDistancias;
+const int modoUsoDistancias = usarDistanciasManuales;
 const int cantidadDeVueltasADar = 1; // en aprendizaje, se frena al terminar
 const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
 bool usarCarrilIzquierdo = false;
@@ -94,7 +99,7 @@ const int tiempoCicloReferencia = 1040;//390;
 // 7.50 V => 771 // armado con regla de 3
 const int MINIMO_VALOR_BATERIA = 760;
 int minimoValorBateria = MINIMO_VALOR_BATERIA; // permite modificarlo en caso de emergencia
-const bool usarTensionCompensadaBateria = true;
+const bool usarTensionCompensadaBateria = false;
 const int MAXIMO_VALOR_BATERIA = 859; // = 8.4V / 2 (divisor resistivo) * 1023.0 / 5V
 
 // parámetros para promedio ponderado de sensoresLinea
@@ -327,7 +332,7 @@ void mostrarSensoresPorSerie() {
   debug("%.4d ", sensores[curva]);
   debug("%.4lu ", contadorMotorIzquierdo);
   debug("%.4lu ", contadorMotorDerecho);
-  if (modoUsoDistancias == usarDistancias) {
+  if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
     debug("%s ", "|");
     for (int i = 0; i < cantidadDeSegmentos; i++) {
       debug("{%lu, ", distanciasRuedaIzquierda[i]);
@@ -415,7 +420,7 @@ void loop() {
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
-  int indiceSegmento = 0; // almacena el indice de segmento de la pista
+  int indiceSegmento = 0; // almacena el indice de segmento de la pista, arranca en 0
   int distanciaActual = 0;
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
@@ -631,6 +636,12 @@ void loop() {
       if (usarVelocidadPorTramo) {
         rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
       }
+      // velocidades manuales según segmento, para curva
+      // if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
+      //   if (indiceSegmento == 7) { // zigzag post-puente
+      //     rangoVelocidad = 80;
+      //   }
+      // }
       digitalWrite(led2, LOW);
       digitalWrite(led3, LOW);
     } else {
@@ -646,7 +657,7 @@ void loop() {
           digitalWrite(led3, LOW);
         }
       }
-      if (modoUsoDistancias == usarDistancias) {
+      if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
         // velocidades manuales según segmento, respetando distancia freno
         //if (indiceSegmento == 2) { // puente
           //rangoVelocidad = 160;
@@ -659,6 +670,11 @@ void loop() {
             rangoVelocidad = rangoVelocidadRectaLenta;
             kP = kPRectaLenta;
             kD = kDRectaLenta;
+            // freno fuerte en puente
+            // if (indiceSegmento == 6) { // puente
+            //   rangoVelocidad = 25;
+            // }
+            
           } else {
             rangoVelocidad = rangoVelocidadCurva;
             kP = kPCurva;
@@ -679,6 +695,19 @@ void loop() {
       }
       digitalWrite(led2, HIGH);
     }
+
+    // velocidades manuales según segmento, fijo independientemente de si es
+    // curva o recta, o de si ya frenó o no
+    // if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
+    //   if (indiceSegmento > 7) {
+    //     kP = kPCurva;
+    //     kD = kDCurva;
+    //     rangoVelocidad = rangoVelocidadCurva;
+    //     velocidadFreno = velocidadFrenoCurva;
+    //     digitalWrite(led2, LOW);
+    //     digitalWrite(led3, LOW);
+    //   }
+    // }
 
     if (estadoActualAdentro == false) {
       rangoVelocidad = rangoVelocidadAfuera;
