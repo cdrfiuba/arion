@@ -50,11 +50,10 @@ bool usarCarrilIzquierdo = false;
 // (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
 // en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
 // se cae inmediatamente después de terminar esa recta)
-const bool usarTiemposPorRecta = false;
-const int cantidadDeRectas = 25; // asume que empieza en recta
-const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {0,
-  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 0,    /* 1 vuelta */
-  0, 2000, 0, 2000, 2000, 0, 2000, 0, 0, 1000, 1000, 65000 /* 1 vuelta */
+const bool usarTiemposPorRecta = true;
+const int cantidadDeRectas = 4; // asume que empieza en recta
+const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {
+  600, 0, 600, 0
 };
 const bool usarVelocidadPorTramo = false;
 const int R = rangoVelocidadRecta;
@@ -747,7 +746,10 @@ void loop() {
       velocidadFreno = velocidadFrenoRecta;
       if (usarTiemposPorRecta) {
         if (millis() - ultimoTiempoRecta > tiempoAMaxVelocidadRecta[contadorRecta]) {
+          kP = kPCurva;
+          kD = kDCurva;
           rangoVelocidad = rangoVelocidadCurva;
+          velocidadFreno = velocidadFrenoCurva;
           led3On();
         } else {
           led3Off();
