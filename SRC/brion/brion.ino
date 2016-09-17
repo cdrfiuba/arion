@@ -47,7 +47,7 @@ const int usarDistancias = 1;
 const int ignorarDistancias = 2;
 // determina si se graban los valores en la EEPROM, si se usan para controlar
 // la velocidad de recta y curva, o si se ignoran
-const int modoUsoDistancias = ignorarDistancias;
+const int modoUsoDistancias = usarDistancias;
 const int cantidadDeVueltasADar = 1; // en aprendizaje, se frena al terminar
 const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
 bool usarCarrilIzquierdo = false;
@@ -99,12 +99,12 @@ const int MAXIMO_VALOR_BATERIA = 859; // = 8.4V / 2 (divisor resistivo) * 1023.0
 
 // parámetros para promedio ponderado de sensoresLinea
 const int COEFICIENTE_SENSOR_IZQ     = 0;
-const int COEFICIENTE_SENSOR_CEN_IZQ = 1000;
-const int COEFICIENTE_SENSOR_CEN     = 2000;
-const int COEFICIENTE_SENSOR_CEN_DER = 3000;
-const int COEFICIENTE_SENSOR_DER     = 4000;
+const int COEFICIENTE_SENSOR_CEN_IZQ = 2000;
+const int COEFICIENTE_SENSOR_CEN     = 3000;
+const int COEFICIENTE_SENSOR_CEN_DER = 4000;
+const int COEFICIENTE_SENSOR_DER     = 6000;
 // centro de línea para sensoresLinea
-const int centroDeLinea = 2000;
+const int centroDeLinea = 3000;
 
 /** fin de parámetros configurables **/
 
