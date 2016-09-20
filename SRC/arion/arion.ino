@@ -53,7 +53,7 @@ bool usarCarrilIzquierdo = false;
 const bool usarTiemposPorRecta = true;
 const int cantidadDeRectas = 4; // asume que empieza en recta
 const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {
-  600, 0, 600, 0
+  1000, 1000, 600, 1200
 };
 const bool usarVelocidadPorTramo = false;
 const int R = rangoVelocidadRecta;
@@ -63,7 +63,7 @@ const int velocidadesCurvaCD[cantidadDeRectas] = {R+00, C+00, R+00, C+00};
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
-const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignore el sensorCurva
+const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignoren los sensores curva
 const int DEBOUNCE_MODO_CURVA = 10; // ms
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
@@ -118,11 +118,12 @@ const int sensor2 = A2; // cen              sensor4(pcb)
 const int sensor3 = A3; // cenDer           sensor5(pcb)
 const int sensor4 = A4; // der              sensor6(pcb)
 const int batteryControl = A6; // not confirmed
-const int sensorCurva = A7;  //             sensor1(pcb)
+const int sensorCurvaIzq = A7;  //             sensor1(pcb)
+const int sensorCurvaDer = A5;  //             sensor7(pcb)
 const int habilitador = 4; // PD4
 
 // armado de array de sensores y arrays para calibración
-const int cantidadDeSensores = 6;
+const int cantidadDeSensores = 7;
 int sensores[cantidadDeSensores];
  // guarda los valores mínimos y máximos usados al calibrar
 int minimosSensores[cantidadDeSensores];
@@ -130,12 +131,13 @@ int maximosSensores[cantidadDeSensores];
 float coeficientesSensores[cantidadDeSensores];
 
 // indices de array sensores
-const int izq    = 0;
-const int cenIzq = 1;
-const int cen    = 2;
-const int cenDer = 3;
-const int der    = 4;
-const int curva  = 5;
+const int izq      = 0;
+const int cenIzq   = 1;
+const int cen      = 2;
+const int cenDer   = 3;
+const int der      = 4;
+const int curvaIzq = 5;
+const int curvaDer = 6;
 
 // control para inicializar la calibración de los sensores
 // sólo cuando se prende el robot
@@ -193,7 +195,8 @@ void setup() {
   //pinMode(sensor3, INPUT);
   //pinMode(sensor4, INPUT);
   //pinMode(batteryControl, INPUT);
-  pinMode(sensorCurva, INPUT);
+  //pinMode(sensorCurvaIzq, INPUT);
+  //pinMode(sensorCurvaDer, INPUT);
 
   // pinMode(ledArduino, OUTPUT);
   pinMode(led1, OUTPUT);
@@ -227,9 +230,9 @@ void setup() {
   // configura INT0 (pin digital 2) en logical change
   // EICRA determina el modo de disparo de la interrupción
   // (en EIFR cambia el bit INTF0 cuando se dispara la interrupción)
-  clearBit(EICRA, ISC01);
-  setBit(EICRA, ISC00);
-  setBit(EIMSK, INT0);
+  //clearBit(EICRA, ISC01);
+  //setBit(EICRA, ISC00);
+  //setBit(EIMSK, INT0);
   // alternativamente se lo puede configurar como PCINT, usando
   // PCINT18 en PCIE2 y PCMSK2
   // setBit(PCICR, PCIE2);
@@ -237,8 +240,8 @@ void setup() {
 
   // configura PCINT22 (pin digital 6), del grupo PCINT2
   // (en PCIFR cambia el bit PCIF2 cuando se dispara la interrupción)
-  setBit(PCICR, PCIE2);
-  setBit(PCMSK2, PCINT22);
+  //setBit(PCICR, PCIE2);
+  //setBit(PCMSK2, PCINT22);
 
   if (inicializarCalibracionInicial) {
     for (int i = 0; i < cantidadDeSensores; i++) {
@@ -249,7 +252,7 @@ void setup() {
     }
     inicializarCalibracionInicial = false;
   }
-  leerCalibracionDeEEPROM();
+  //leerCalibracionDeEEPROM();
 
   digitalWrite(habilitador, HIGH);
   led1Off();
@@ -275,12 +278,13 @@ void esperarReboteBoton() {
 inline void obtenerSensores() {
   // carga en el array de sensores las lecturas AD de cada sensor
   // este proceso lleva 112us con el ADC con prescaler 16
-  sensores[izq]    = 1024 - analogRead(sensor0);
-  sensores[cenIzq] = 1024 - analogRead(sensor1);
-  sensores[cen]    = 1024 - analogRead(sensor2);
-  sensores[cenDer] = 1024 - analogRead(sensor3);
-  sensores[der]    = 1024 - analogRead(sensor4);
-  sensores[curva]  = 1024 - analogRead(sensorCurva);
+  sensores[izq]      = 1024 - analogRead(sensor0);
+  sensores[cenIzq]   = 1024 - analogRead(sensor1);
+  sensores[cen]      = 1024 - analogRead(sensor2);
+  sensores[cenDer]   = 1024 - analogRead(sensor3);
+  sensores[der]      = 1024 - analogRead(sensor4);
+  sensores[curvaIzq] = 1024 - analogRead(sensorCurvaIzq);
+  sensores[curvaDer] = 1024 - analogRead(sensorCurvaDer);
 }
 
 inline void obtenerSensoresCalibrados() {
@@ -328,7 +332,8 @@ void mostrarSensoresPorSerie() {
   debug("%.4d ", sensores[cen]);
   debug("%.4d ", sensores[cenDer]);
   debug("%.4d ", sensores[der]);
-  debug("%.4d ", sensores[curva]);
+  debug("%.4d ", sensores[curvaIzq]);
+  debug("%.4d ", sensores[curvaDer]);
   debug("%.4d ", contadorMotorIzquierdo);
   debug("%.4d ", contadorMotorDerecho);
   if (modoUsoDistancias == usarDistancias) {
@@ -507,8 +512,10 @@ void loop() {
   int sensoresLinea = 0;
   bool estadoActualAdentro = true;
   bool ultimoEstadoActualAdentro = true;
-  int sensorCurvaActivo;
-  int ultimoValorSensorCurva = 0;
+  int sensorCurvaIzqActivo;
+  int sensorCurvaDerActivo;
+  int ultimoValorsensorCurvaIzq = 0;
+  int ultimoValorsensorCurvaDer = 0;
   bool calibracionReseteada = false;
   int ultimoBorde = izquierda;
   bool modoCurva = MODO_CURVA_INICIAL;
@@ -685,8 +692,10 @@ void loop() {
       }
     }
 
-    sensorCurvaActivo = ((sensores[curva] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
-    if (sensorCurvaActivo == 1 && sensorCurvaActivo != ultimoValorSensorCurva) {
+    sensorCurvaIzqActivo = ((sensores[curvaIzq] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
+    sensorCurvaDerActivo = ((sensores[curvaDer] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
+    if (sensorCurvaIzqActivo == 1 && sensorCurvaIzqActivo != ultimoValorsensorCurvaIzq &&
+        sensorCurvaDerActivo == 1 && sensorCurvaDerActivo != ultimoValorsensorCurvaDer) {
       if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA) {
         // tengo seguridad de que pasó el rebote del sensor
         modoCurva = !modoCurva;
@@ -727,7 +736,8 @@ void loop() {
         }
       }
     }
-    ultimoValorSensorCurva = sensorCurvaActivo;
+    ultimoValorsensorCurvaIzq = sensorCurvaIzqActivo;
+    ultimoValorsensorCurvaDer = sensorCurvaDerActivo;
 
     if (modoCurva) {
       kP = kPCurva;
@@ -750,11 +760,17 @@ void loop() {
           kD = kDCurva;
           rangoVelocidad = rangoVelocidadCurva;
           velocidadFreno = velocidadFrenoCurva;
+          
+          // velocidades manuales según segmento, después de frenar
+          // if (contadorRecta == 3) {
+          //   rangoVelocidad = 20;
+          // }
           led3On();
         } else {
           led3Off();
         }
       }
+      
       if (modoUsoDistancias == usarDistancias) {
         distanciaActual = (contadorMotorIzquierdo + contadorMotorDerecho) / 2;
         distanciaEsperada = (distanciasRuedaIzquierda[indiceSegmento] + distanciasRuedaDerecha[indiceSegmento]) / 2;
