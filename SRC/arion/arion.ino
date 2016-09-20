@@ -14,7 +14,7 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
+int rangoVelocidadRecta = 150; // velocidad real = rango - freno / 2
 int rangoVelocidadCurva = 70;
 int rangoVelocidadAfuera = 0;
 
@@ -51,20 +51,20 @@ bool usarCarrilIzquierdo = false;
 // en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
 // se cae inmediatamente después de terminar esa recta)
 const bool usarTiemposPorRecta = true;
-const int cantidadDeRectas = 4; // asume que empieza en recta
+const int cantidadDeRectas = 2; // asume que empieza en recta
 const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {
-  1000, 1000, 600, 1200
+  100, 400
 };
 const bool usarVelocidadPorTramo = false;
 const int R = rangoVelocidadRecta;
 const int C = rangoVelocidadCurva;
-const int velocidadesCurvaCI[cantidadDeRectas] = {R+00, C+00, R+00, C+00};
-const int velocidadesCurvaCD[cantidadDeRectas] = {R+00, C+00, R+00, C+00};
+const int velocidadesCurvaCI[cantidadDeRectas] = {R+00, C+00};
+const int velocidadesCurvaCD[cantidadDeRectas] = {R+00, C+00};
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
 const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignoren los sensores curva
-const int DEBOUNCE_MODO_CURVA = 10; // ms
+const int DEBOUNCE_MODO_CURVA = 0; // ms
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
 const int MAXIMO_SENSORES_LINEA = 4000;
@@ -109,9 +109,9 @@ const int sentidoMotorI = 6;
 const int led1 = 12;  // Led 1
 const int led2 = 13;  // Led 2
 const int led3 = 11;  // Led 3
-const int boton1 = 7; // Boton2(pcb)   boton1 (code): Arrancar
-const int boton2 = 8; // pin 1 arduino  - pin 31(avr)
-const int boton3 = 8; // Boton1(pcb)   boton3 (code): Calibrar
+const int boton1 = 8; // Boton1(pcb)   boton3 (code): Calibrar
+const int boton2 = 7; // pin 1 arduino  - pin 31(avr)
+const int boton3 = 7; // Boton2(pcb)   boton1 (code): Arrancar
 const int sensor0 = A0; // sensor0 (code)   sensor2(pcb) izquierda  [izq]
 const int sensor1 = A1; // cenIzq           sensor3(pcb)
 const int sensor2 = A2; // cen              sensor4(pcb)
@@ -349,8 +349,8 @@ void mostrarSensoresPorSerie() {
 void apagarMotores() {
   digitalWrite(sentidoMotorI, adelante);
   digitalWrite(sentidoMotorD, adelante);
-  analogWrite(pwmMotorD, 0);
   analogWrite(pwmMotorI, 0);
+  analogWrite(pwmMotorD, 0);
 }
 
 inline void chequearBateria() {
@@ -514,15 +514,12 @@ void loop() {
   bool ultimoEstadoActualAdentro = true;
   int sensorCurvaIzqActivo;
   int sensorCurvaDerActivo;
-  int ultimoValorsensorCurvaIzq = 0;
-  int ultimoValorsensorCurvaDer = 0;
-  bool calibracionReseteada = false;
+  //bool calibracionReseteada = false;
   int ultimoBorde = izquierda;
   bool modoCurva = MODO_CURVA_INICIAL;
   // para calcular tiempo entre ciclos de PID.
   int tiempoUs = tiempoCicloReferencia; // no debe ser 0, pues se usa para dividir
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
-  unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
@@ -530,6 +527,10 @@ void loop() {
   int distanciaActual = 0;
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
+  bool cambioModoCurvaCompletado = true;
+  int calibrar = false;
+  unsigned long int ultimoTiempoCalibracion = millis(); // ms
+  //const int tiempoCalibracion = 30; // ms
 
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
@@ -575,33 +576,88 @@ void loop() {
       led2On();
     }
 
-    // calibración usando el botón
-    calibracionReseteada = false;
-    while (apretado(boton3)) {
-      if (!calibracionReseteada) {
-        // reseteo la calibración
-        for (int i = 0; i < cantidadDeSensores; i++) {
-          minimosSensores[i] = 1023;
-          maximosSensores[i] = 0;
-        }
-        calibracionReseteada = true;
-        //digitalWrite(habilitador, HIGH);
-        //delay(1);
+    //// calibración usando el botón
+    //calibracionReseteada = false;
+    //while (apretado(boton3)) {
+      //if (!calibracionReseteada) {
+        //// reseteo la calibración
+        //for (int i = 0; i < cantidadDeSensores; i++) {
+          //minimosSensores[i] = 1023;
+          //maximosSensores[i] = 0;
+        //}
+        //calibracionReseteada = true;
+        ////digitalWrite(habilitador, HIGH);
+        ////delay(1);
         
-        // reuso la bandera de calibracionReseteada para que esto se ejecute
-        // una sola vez por apretada de botón
-        usarCarrilIzquierdo = !usarCarrilIzquierdo;
+        //// reuso la bandera de calibracionReseteada para que esto se ejecute
+        //// una sola vez por apretada de botón
+        //usarCarrilIzquierdo = !usarCarrilIzquierdo;
+      //}
+
+      //led1On();
+      //calibrarSensores();
+      //guardarCalibracionEnEEPROM();
+      //led1Off();
+      //led2Off();
+      //led3Off();
+      //delay(50);
+    //}
+
+    while (apretado(boton3)) {
+      calibrar = true;
+      led1Off();
+      led2Off();
+      led3Off();
+    }
+    
+    if (calibrar) {
+      calibrar = false;
+      delay(400);
+
+      // reseteo la calibración
+      for (int i = 0; i < cantidadDeSensores; i++) {
+        minimosSensores[i] = 1023;
+        maximosSensores[i] = 0;
       }
+      //digitalWrite(habilitador, HIGH);
+      //delay(1);
+      
+      // reuso la bandera de calibracionReseteada para que esto se ejecute
+      // una sola vez por apretada de botón
+      usarCarrilIzquierdo = !usarCarrilIzquierdo;
 
       led1On();
-      calibrarSensores();
+      
+      // gira y calibra
+      ultimoTiempoCalibracion = millis();
+      digitalWrite(sentidoMotorI, atras);
+      digitalWrite(sentidoMotorD, adelante);
+      analogWrite(pwmMotorI, 255 - 70);
+      analogWrite(pwmMotorD, 70);
+      while (millis() - ultimoTiempoCalibracion < 30) {
+        calibrarSensores();
+      }
+      apagarMotores();
+      delay(400);
+      
+      ultimoTiempoCalibracion = millis();
+      digitalWrite(sentidoMotorI, adelante);
+      digitalWrite(sentidoMotorD, atras);
+      analogWrite(pwmMotorI, 70);
+      analogWrite(pwmMotorD, 255 - 70);
+      while (millis() - ultimoTiempoCalibracion < 60) {
+        calibrarSensores();
+      }
+      apagarMotores();
+      delay(400);
+      
       guardarCalibracionEnEEPROM();
       led1Off();
       led2Off();
       led3Off();
       delay(50);
-    }
-
+      
+    }    
   }
   esperarReboteBoton();
   led1Off();
@@ -694,50 +750,49 @@ void loop() {
 
     sensorCurvaIzqActivo = ((sensores[curvaIzq] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
     sensorCurvaDerActivo = ((sensores[curvaDer] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
-    if (sensorCurvaIzqActivo == 1 && sensorCurvaIzqActivo != ultimoValorsensorCurvaIzq &&
-        sensorCurvaDerActivo == 1 && sensorCurvaDerActivo != ultimoValorsensorCurvaDer) {
-      if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA) {
-        // tengo seguridad de que pasó el rebote del sensor
-        modoCurva = !modoCurva;
+    
+    if (sensorCurvaIzqActivo == 0 && sensorCurvaDerActivo == 0) {
+      cambioModoCurvaCompletado = true;
+    }
+    if (sensorCurvaIzqActivo == 1 && sensorCurvaDerActivo == 1 && cambioModoCurvaCompletado) {
+      cambioModoCurvaCompletado = false;
+      // tengo seguridad de que pasó el rebote del sensor
+      modoCurva = !modoCurva;
 
-        if (modoUsoDistancias == aprenderDistancias) {
-          distanciasRuedaIzquierda[indiceSegmento] = contadorMotorIzquierdo;
-          distanciasRuedaDerecha[indiceSegmento] = contadorMotorDerecho;
-        }
+      if (modoUsoDistancias == aprenderDistancias) {
+        distanciasRuedaIzquierda[indiceSegmento] = contadorMotorIzquierdo;
+        distanciasRuedaDerecha[indiceSegmento] = contadorMotorDerecho;
+      }
 
-        // indice usado para identificar el segmento
-        indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
+      // indice usado para identificar el segmento
+      indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
 
-        // Reseteo el valor del encoder
-        contadorMotorIzquierdo = 0;
-        contadorMotorDerecho = 0;
+      // Reseteo el valor del encoder
+      contadorMotorIzquierdo = 0;
+      contadorMotorDerecho = 0;
 
-        if (modoUsoDistancias == aprenderDistancias) {
-          if (indiceSegmento == 0) {
-            cantidadDeVueltasRestantes--;
-            if (cantidadDeVueltasRestantes <= 0) {
-              apagarMotores();
-              guardarDistanciasEnEEPROM();
-              break;
-            }
-          }
-        }
-
-        ultimoTiempoModoCurva = millis();
-        // si paso a modo curva, freno porque venia rápido
-        if (modoCurva) {
-          // frenarMotores(); // Para las pruebas de encoders lo comento
-        } else {
-          ultimoTiempoRecta = millis();
-          contadorRecta++;
-          if (contadorRecta == cantidadDeRectas) {
-            contadorRecta = 0;
+      if (modoUsoDistancias == aprenderDistancias) {
+        if (indiceSegmento == 0) {
+          cantidadDeVueltasRestantes--;
+          if (cantidadDeVueltasRestantes <= 0) {
+            apagarMotores();
+            guardarDistanciasEnEEPROM();
+            break;
           }
         }
       }
+
+      // si paso a modo curva, freno porque venia rápido
+      if (modoCurva) {
+        // frenarMotores(); // Para las pruebas de encoders lo comento
+      } else {
+        ultimoTiempoRecta = millis();
+        contadorRecta++;
+        if (contadorRecta == cantidadDeRectas) {
+          contadorRecta = 0;
+        }
+      }
     }
-    ultimoValorsensorCurvaIzq = sensorCurvaIzqActivo;
-    ultimoValorsensorCurvaDer = sensorCurvaDerActivo;
 
     if (modoCurva) {
       kP = kPCurva;
