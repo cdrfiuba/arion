@@ -1,5 +1,5 @@
 #include <avr/io.h>
-#include <avr/interrupt.h>
+//#include <avr/interrupt.h>
 #include <EEPROM.h>
 
 /** inicio de parámetros configurables **/
@@ -14,8 +14,8 @@ const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
 // parámetros de velocidades máximas en recta y curva
-int rangoVelocidadRecta = 150; // velocidad real = rango - freno / 2
-int rangoVelocidadCurva = 70;
+int rangoVelocidadRecta = 130; // velocidad real = rango - freno / 2
+int rangoVelocidadCurva = 60;
 int rangoVelocidadAfuera = 0;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
@@ -24,14 +24,14 @@ int velocidadFrenoCurva = 70;
 int velocidadFrenoAfuera = 0;
 
 // parámetros PID
-float kPRecta = 0.08;
-float kDRecta = 7.0;
+float kPRecta = 0.05;
+float kDRecta = 4.0;
 float kPCurva = 0.08;
 float kDCurva = 4.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
-const int cantidadDeSegmentos = 8;
+const int cantidadDeSegmentos = 26 + 1;
 // Arrays donde se guardan las distancias medidas por los encoders
 unsigned int distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
 unsigned int distanciasRuedaDerecha[cantidadDeSegmentos] = {};
@@ -51,15 +51,18 @@ bool usarCarrilIzquierdo = false;
 // en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
 // se cae inmediatamente después de terminar esa recta)
 const bool usarTiemposPorRecta = true;
-const int cantidadDeRectas = 2; // asume que empieza en recta
+const int cantidadDeRectas = 13 + 1; // asume que empieza en recta
+const int d1 = 130, d2 = 200, dp = 400, dt = 400; // dn = n maderas de largo
 const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {
-  100, 400
+  d2, d1, d1, d1, 0/*salida cruz*/, d1, d2, dt/*tunel*/, d2, d1, dp/*puente*/, d1, d1, 
+  65000
 };
-const bool usarVelocidadPorTramo = false;
-const int R = rangoVelocidadRecta;
+const bool usarVelocidadPorCurva = false;
 const int C = rangoVelocidadCurva;
-const int velocidadesCurvaCI[cantidadDeRectas] = {R+00, C+00};
-const int velocidadesCurvaCD[cantidadDeRectas] = {R+00, C+00};
+const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00};
+const int velocidadesCurvaCD[cantidadDeRectas] = {};
+
+const int tiempoFrenoInicioCurva = 200;
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
@@ -252,7 +255,7 @@ void setup() {
     }
     inicializarCalibracionInicial = false;
   }
-  //leerCalibracionDeEEPROM();
+  leerCalibracionDeEEPROM();
 
   digitalWrite(habilitador, HIGH);
   led1Off();
@@ -514,13 +517,14 @@ void loop() {
   bool ultimoEstadoActualAdentro = true;
   int sensorCurvaIzqActivo;
   int sensorCurvaDerActivo;
-  //bool calibracionReseteada = false;
+  bool calibracionReseteada = false;
   int ultimoBorde = izquierda;
   bool modoCurva = MODO_CURVA_INICIAL;
   // para calcular tiempo entre ciclos de PID.
   int tiempoUs = tiempoCicloReferencia; // no debe ser 0, pues se usa para dividir
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
+  unsigned long int ultimoTiempoCurva = 0; // guarda el valor de millis()
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   int indiceSegmento = 0; // almacena el indice de segmento de la pista
@@ -528,13 +532,13 @@ void loop() {
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
   bool cambioModoCurvaCompletado = true;
-  int calibrar = false;
-  unsigned long int ultimoTiempoCalibracion = millis(); // ms
+  //int calibrar = false;
+  //unsigned long int ultimoTiempoCalibracion = millis(); // ms
   //const int tiempoCalibracion = 30; // ms
 
-  // si fue seleccionado el modo usarVelocidadPorTramo,
+  // si fue seleccionado el modo usarVelocidadPorCurva,
   // precargo la data del carril seleccionado
-  if (usarVelocidadPorTramo) {
+  if (usarVelocidadPorCurva) {
     if (usarCarrilIzquierdo) {
       for (int i = 0; i < cantidadDeRectas; i++) {
         velocidadesCurvaPorTramo[i] = velocidadesCurvaCI[i];
@@ -576,88 +580,91 @@ void loop() {
       led2On();
     }
 
-    //// calibración usando el botón
-    //calibracionReseteada = false;
-    //while (apretado(boton3)) {
-      //if (!calibracionReseteada) {
-        //// reseteo la calibración
-        //for (int i = 0; i < cantidadDeSensores; i++) {
-          //minimosSensores[i] = 1023;
-          //maximosSensores[i] = 0;
-        //}
-        //calibracionReseteada = true;
-        ////digitalWrite(habilitador, HIGH);
-        ////delay(1);
+    // calibración usando el botón
+    calibracionReseteada = false;
+    while (apretado(boton3)) {
+      if (!calibracionReseteada) {
+        // reseteo la calibración
+        for (int i = 0; i < cantidadDeSensores; i++) {
+          minimosSensores[i] = 1023;
+          maximosSensores[i] = 0;
+        }
+        calibracionReseteada = true;
+        //digitalWrite(habilitador, HIGH);
+        //delay(1);
         
-        //// reuso la bandera de calibracionReseteada para que esto se ejecute
-        //// una sola vez por apretada de botón
-        //usarCarrilIzquierdo = !usarCarrilIzquierdo;
+        // reuso la bandera de calibracionReseteada para que esto se ejecute
+        // una sola vez por apretada de botón
+        usarCarrilIzquierdo = !usarCarrilIzquierdo;
+      }
+
+      led1On();
+      calibrarSensores();
+      led1Off();
+      led2Off();
+      led3Off();
+      delay(50);
+    }
+    if (calibracionReseteada) {
+      guardarCalibracionEnEEPROM();
+    }
+
+    // calibracion automática
+    //while (apretado(boton3)) {
+      //calibrar = true;
+      //led1Off();
+      //led2Off();
+      //led3Off();
+    //}
+    
+    //if (calibrar) {
+      //calibrar = false;
+      //delay(400);
+
+      //// reseteo la calibración
+      //for (int i = 0; i < cantidadDeSensores; i++) {
+        //minimosSensores[i] = 1023;
+        //maximosSensores[i] = 0;
       //}
+      ////digitalWrite(habilitador, HIGH);
+      ////delay(1);
+      
+      //// reuso la bandera de calibracionReseteada para que esto se ejecute
+      //// una sola vez por apretada de botón
+      //usarCarrilIzquierdo = !usarCarrilIzquierdo;
 
       //led1On();
-      //calibrarSensores();
+      
+      //// gira y calibra
+      //ultimoTiempoCalibracion = millis();
+      //digitalWrite(sentidoMotorI, atras);
+      //digitalWrite(sentidoMotorD, adelante);
+      //analogWrite(pwmMotorI, 255 - 70);
+      //analogWrite(pwmMotorD, 70);
+      //while (millis() - ultimoTiempoCalibracion < 30) {
+        //calibrarSensores();
+      //}
+      //apagarMotores();
+      //delay(400);
+      
+      //ultimoTiempoCalibracion = millis();
+      //digitalWrite(sentidoMotorI, adelante);
+      //digitalWrite(sentidoMotorD, atras);
+      //analogWrite(pwmMotorI, 70);
+      //analogWrite(pwmMotorD, 255 - 70);
+      //while (millis() - ultimoTiempoCalibracion < 60) {
+        //calibrarSensores();
+      //}
+      //apagarMotores();
+      //delay(400);
+      
       //guardarCalibracionEnEEPROM();
       //led1Off();
       //led2Off();
       //led3Off();
       //delay(50);
+      
     //}
-
-    while (apretado(boton3)) {
-      calibrar = true;
-      led1Off();
-      led2Off();
-      led3Off();
-    }
-    
-    if (calibrar) {
-      calibrar = false;
-      delay(400);
-
-      // reseteo la calibración
-      for (int i = 0; i < cantidadDeSensores; i++) {
-        minimosSensores[i] = 1023;
-        maximosSensores[i] = 0;
-      }
-      //digitalWrite(habilitador, HIGH);
-      //delay(1);
-      
-      // reuso la bandera de calibracionReseteada para que esto se ejecute
-      // una sola vez por apretada de botón
-      usarCarrilIzquierdo = !usarCarrilIzquierdo;
-
-      led1On();
-      
-      // gira y calibra
-      ultimoTiempoCalibracion = millis();
-      digitalWrite(sentidoMotorI, atras);
-      digitalWrite(sentidoMotorD, adelante);
-      analogWrite(pwmMotorI, 255 - 70);
-      analogWrite(pwmMotorD, 70);
-      while (millis() - ultimoTiempoCalibracion < 30) {
-        calibrarSensores();
-      }
-      apagarMotores();
-      delay(400);
-      
-      ultimoTiempoCalibracion = millis();
-      digitalWrite(sentidoMotorI, adelante);
-      digitalWrite(sentidoMotorD, atras);
-      analogWrite(pwmMotorI, 70);
-      analogWrite(pwmMotorD, 255 - 70);
-      while (millis() - ultimoTiempoCalibracion < 60) {
-        calibrarSensores();
-      }
-      apagarMotores();
-      delay(400);
-      
-      guardarCalibracionEnEEPROM();
-      led1Off();
-      led2Off();
-      led3Off();
-      delay(50);
-      
-    }    
   }
   esperarReboteBoton();
   led1Off();
@@ -685,6 +692,7 @@ void loop() {
 
   // inicialización tiempos
   ultimoTiempoRecta = millis();
+  ultimoTiempoCurva = millis();
   ultimoTiempoUs = micros();
 
   // ejecuta el ciclo principal hasta que se presione el botón
@@ -785,6 +793,7 @@ void loop() {
       // si paso a modo curva, freno porque venia rápido
       if (modoCurva) {
         // frenarMotores(); // Para las pruebas de encoders lo comento
+        ultimoTiempoCurva = millis();
       } else {
         ultimoTiempoRecta = millis();
         contadorRecta++;
@@ -799,8 +808,12 @@ void loop() {
       kD = kDCurva;
       rangoVelocidad = rangoVelocidadCurva;
       velocidadFreno = velocidadFrenoCurva;
-      if (usarVelocidadPorTramo) {
+      if (usarVelocidadPorCurva) {
         rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
+      }
+      if (millis() - ultimoTiempoCurva < tiempoFrenoInicioCurva) {
+        rangoVelocidad = 0;
+        velocidadFreno = 255;
       }
       led2Off();
       led3Off();
@@ -959,14 +972,14 @@ inline void frenarMotores() {
   led1Off();
 }
 
-// handler para PCINT22
-ISR(PCINT2_vect) {
-  contadorMotorIzquierdo++;
-}
-// handler para INT0
-ISR(INT0_vect) {
-  contadorMotorDerecho++;
-}
+//// handler para PCINT22
+//ISR(PCINT2_vect) {
+  //contadorMotorIzquierdo++;
+//}
+//// handler para INT0
+//ISR(INT0_vect) {
+  //contadorMotorDerecho++;
+//}
 
 void guardarIntEnEEPROM(int valor, int posicion) {
   uint8_t low = valor & 0xFF;
