@@ -15,23 +15,23 @@ const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos 
 
 // parámetros de velocidades máximas en recta y curva
 int rangoVelocidadRecta = 130; // velocidad real = rango - freno / 2
-int rangoVelocidadCurva = 60;
+int rangoVelocidadCurva = 110;
 int rangoVelocidadAfuera = 0;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-int velocidadFrenoRecta = 255;
-int velocidadFrenoCurva = 70;
+int velocidadFrenoRecta = 70;
+int velocidadFrenoCurva = 90;
 int velocidadFrenoAfuera = 0;
 
 // parámetros PID
-float kPRecta = 0.05;
-float kDRecta = 4.0;
-float kPCurva = 0.08;
+float kPRecta = 0.03;
+float kDRecta = 5.0;
+float kPCurva = 0.03;
 float kDCurva = 4.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
-const int cantidadDeSegmentos = 26 + 1;
+const int cantidadDeSegmentos = 1;
 // Arrays donde se guardan las distancias medidas por los encoders
 unsigned int distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
 unsigned int distanciasRuedaDerecha[cantidadDeSegmentos] = {};
@@ -50,12 +50,13 @@ bool usarCarrilIzquierdo = false;
 // (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
 // en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
 // se cae inmediatamente después de terminar esa recta)
-const bool usarTiemposPorRecta = true;
-const int cantidadDeRectas = 13 + 1; // asume que empieza en recta
+const bool usarTiemposPorRecta = false;
+const int cantidadDeRectas = 2; // asume que empieza en recta
 const int d1 = 130, d2 = 200, dp = 400, dt = 400; // dn = n maderas de largo
 const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {
-  d2, d1, d1, d1, 0/*salida cruz*/, d1, d2, dt/*tunel*/, d2, d1, dp/*puente*/, d1, d1, 
-  65000
+  d1, d1
+  //d2, d1, d1, d1, 0/*salida cruz*/, d1, d2, dt/*tunel*/, d2, d1, dp/*puente*/, d1, d1, 
+  //65000
 };
 const bool usarVelocidadPorCurva = false;
 const int C = rangoVelocidadCurva;
@@ -337,8 +338,10 @@ void mostrarSensoresPorSerie() {
   debug("%.4d ", sensores[der]);
   debug("%.4d ", sensores[curvaIzq]);
   debug("%.4d ", sensores[curvaDer]);
-  debug("%.4d ", contadorMotorIzquierdo);
-  debug("%.4d ", contadorMotorDerecho);
+  if (modoUsoDistancias != ignorarDistancias) {
+    debug("%.4d ", contadorMotorIzquierdo);
+    debug("%.4d ", contadorMotorDerecho);
+  }
   if (modoUsoDistancias == usarDistancias) {
     debug("%s ", "|");
     for (int i = 0; i < cantidadDeSegmentos; i++) {
