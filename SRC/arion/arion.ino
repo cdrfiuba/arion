@@ -6,7 +6,7 @@
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
 // const bool DEBUG = false;
-const bool DEBUG = false;
+const bool DEBUG = true;
 
 // parámetros para estadoActualAdentro,
 // determina si se debe clampear los valores de sensoresLinea en el PID
@@ -133,6 +133,8 @@ int sensores[cantidadDeSensores];
 int minimosSensores[cantidadDeSensores];
 int maximosSensores[cantidadDeSensores];
 float coeficientesSensores[cantidadDeSensores];
+byte canalesADC[cantidadDeSensores] = {sensor0, sensor1, sensor2, sensor3, sensor4, sensorCurvaIzq, sensorCurvaDer};
+volatile byte indiceConversion = 0;
 
 // indices de array sensores
 const int izq      = 0;
@@ -269,6 +271,8 @@ void setup() {
   contadorMotorIzquierdo = 0;
   contadorMotorDerecho = 0;
 
+  iniciarConversiones();
+
 }
 
 bool apretado(int boton) {
@@ -280,6 +284,7 @@ void esperarReboteBoton() {
 }
 
 inline void obtenerSensores() {
+  return;
   // carga en el array de sensores las lecturas AD de cada sensor
   // este proceso lleva 112us con el ADC con prescaler 16
   sensores[izq]      = 1024 - analogRead(sensor0);
@@ -535,6 +540,7 @@ void loop() {
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
   bool cambioModoCurvaCompletado = true;
+  byte contadorDataSerie = 0;
   //int calibrar = false;
   //unsigned long int ultimoTiempoCalibracion = millis(); // ms
   //const int tiempoCalibracion = 30; // ms
@@ -559,15 +565,14 @@ void loop() {
   // hasta que se presione el botón, espera
   while (!apretado(boton1)) {
     leerVariablesDeSerie();
+    
+    noInterrupts();
+    delayMicroseconds(120);
     chequearBateriaBloqueante();
-
-    //digitalWrite(habilitador, HIGH);
-    //delayMicroseconds(100);
     obtenerSensoresCalibrados();
     mostrarSensoresPorSerie();
-    // mostrarSensorLEDs(cen);
-    //digitalWrite(habilitador, LOW);
-    //delay(100);
+    interrupts();
+    delay(1);
 
     // carga opcional de información de encoders
     if (modoUsoDistancias == usarDistancias) {
@@ -923,12 +928,21 @@ void loop() {
       // Permite ver por puerto serie cuánto tarda el ciclo de PID
       // antes de perder tiempo mandando cosas por puerto serie.
       // Usado para medir tiempoCicloReferencia.
-      tiempoUs = micros() - ultimoTiempoUs;
-      debug("%.4i ", tiempoUs);
-      debug("%.4i ", rangoVelocidad);
-      debug("%.4i ", sensoresLinea);
-      debug("%.4i\n", velocidadMotorFrenado);
-
+      //tiempoUs = micros() - ultimoTiempoUs;
+      if (contadorDataSerie == 0) {
+        debug("%.4i ", tiempoUs);
+      } else if (contadorDataSerie == 1) {
+        debug("%.4i ", rangoVelocidad);
+      } else if (contadorDataSerie == 2) {
+        debug("%.4i ", sensoresLinea);
+      } else if (contadorDataSerie == 3) {
+        debug("%.4i\n", velocidadMotorFrenado);
+      }
+      contadorDataSerie++;
+      if (contadorDataSerie == 4) {
+        contadorDataSerie = 0;
+      }
+    
       // debug("%.4i ", velocidadMotorFrenado);
       // debug("%.4lu ", contadorMotorIzquierdo);
       // debug("%.4lu\n", contadorMotorDerecho);
@@ -936,7 +950,8 @@ void loop() {
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
 
-    while (tiempoUs < tiempoCicloReferencia) {
+    if (tiempoUs < tiempoCicloReferencia) {
+      delayMicroseconds(tiempoCicloReferencia - tiempoUs);
       tiempoUs = micros() - ultimoTiempoUs;
     }
 
@@ -1060,3 +1075,46 @@ void leerCalibracionDeEEPROM() {
     coeficientesSensores[i] = 1023.0 / (float)(maximosSensores[i] - minimosSensores[i]);
   }
 }
+
+
+inline void iniciarConversiones() {
+  byte pin;
+  for (byte i = 0; i < cantidadDeSensores; i++) {
+    pin = canalesADC[i];
+    // Arduino pin conversion
+    #if defined(__AVR_ATmega32U4__)
+      if (pin >= 18) pin -= 18; // allow for channel or pin numbers
+      pin = analogPinToChannel(pin);
+    #else
+      if (pin >= 14) pin -= 14; // allow for channel or pin numbers
+    #endif
+    canalesADC[i] = pin;
+  }  
+  pin = canalesADC[indiceConversion];
+  
+  #if defined(ADCSRB) && defined(MUX5)
+    // the MUX5 bit of ADCSRB selects whether we're reading from channels
+    // 0 to 7 (MUX5 low) or 8 to 15 (MUX5 high).
+    ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin >> 3) & 0x01) << MUX5);
+  #endif
+
+  // when ADLAR is low, ADCL must be read first, otherwise, reading ADCH is
+  // enough (if 8 bits are sufficient)
+  ADMUX = (0 << REFS1) | (1 << REFS0) | (0 << ADLAR) | (pin & 0x07);
+
+  // interrupt enable, start the conversion
+  ADCSRA |= (1 << ADIE) | (1 << ADSC);
+}
+
+
+ISR(ADC_vect) {
+  sensores[indiceConversion] = 1024 - ADC;
+  if (++indiceConversion == cantidadDeSensores) {
+    indiceConversion = 0;
+  }
+  
+  byte pin = canalesADC[indiceConversion];
+  ADMUX = (0 << REFS1) | (1 << REFS0) | (0 << ADLAR) | (pin & 0x07);
+  ADCSRA |= _BV(ADSC); // Start next conversion  
+}
+
