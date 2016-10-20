@@ -1,60 +1,71 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <EEPROM.h>
+#include <PID_v1.h>
 
 /** inicio de parámetros configurables **/
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
 const bool DEBUG = false;
-//const bool DEBUG = true;
+// const bool DEBUG = true;
+int speedSetpoint = 45; // cuentas por (ENCODER_ARRAY_SIZE * ENCODER_SUBSAMPLING) ciclos
+int cant_curvas = 0;
+
+
+struct DebugArray {
+  double k_p1;
+  double k_i1;
+  double k_d1;
+  double setpoint1;
+  double input1;
+  double output1;
+  int sensoresLinea;
+};
 
 // parámetros para estadoActualAdentro,
 // determina si se debe clampear los valores de sensoresLinea en el PID
 const int tolerancia = 50; // margen de ruido al medir negro
 const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
 
+int rangoVelocidad;
+
 // parámetros de velocidades máximas en recta y curva
 // 770: 230, 110, 170, 50
 // 839: 210, 100, 155, 45
 // 859: 200, 95, 150, 45
-const int rangoVelocidadRecta = 100; // velocidad real = rango - freno / 2
-const int rangoVelocidadRectaLenta = 50;
-const int rangoVelocidadCurva = 70;
-const int rangoVelocidadAfuera = 0;
-const int tiempoDeFrenoPorDistancia = 30000; // ms
+int rangoVelocidadAprender = 40;
+int rangoVelocidadRecta = 85;//85;//95;// 75 (terminó) 128; // velocidad real = rango - freno / 2
+int rangoVelocidadRectaLenta = speedSetpoint;//95;
+int rangoVelocidadCurva = speedSetpoint;//130;
+int rangoVelocidadAfuera = speedSetpoint; //
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
-const int velocidadFrenoRecta = 255;
-const int velocidadFrenoCurva = 200;
+const int velocidadFrenoRecta = 0; //255;
+const int velocidadFrenoCurva = 0; //60;
 const int velocidadFrenoAfuera = 0;
 
 // parámetros PID
-const float kPRecta = 0.08;
-const float kDRecta = 7.0;
-const float kPRectaLenta = 0.08;
-const float kDRectaLenta = 7.0;
-const float kPCurva = 0.08;
-const float kDCurva = 4.0;
+const float kPRecta = 0.02;//0.02;//0.03;// 0.04;     //1.0 / 9.0; //1/12
+const float kDRecta = 0.95;//1 estable pero con probable sobre corrección;//0.125;//075;//;3;        //3.0; //7
+const float kPRectaLenta = kPRecta ;// 1.0 / 7.0;
+const float kDRectaLenta = kDRecta;//3.0; // 200
+const float kPCurva = 0.03;//1.0 / 9.0;
+const float kDCurva = kDRecta;//3.0; //30
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
-const int cantidadDeSegmentos = 9;
+const int cantidadDeSegmentos = 1;
 // Arrays donde se guardan las distancias medidas por los encoders
-unsigned long distanciasRuedaIzquierda[cantidadDeSegmentos] = {
-  741, 2291, 1503, 2291, 982, 536, 2071, 2560, 2000
-};
-unsigned long distanciasRuedaDerecha[cantidadDeSegmentos] = {
-  749, 2517, 1541, 2130, 1004, 418, 2229, 2556, 2000
-};
+unsigned int distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
+unsigned int distanciasRuedaDerecha[cantidadDeSegmentos] = {};
 const int aprenderDistancias = 0;
 const int usarDistancias = 1;
 const int ignorarDistancias = 2;
-const int usarDistanciasManuales = 3; // usa distancias del array en RAM en vez de EEPROM
 // determina si se graban los valores en la EEPROM, si se usan para controlar
 // la velocidad de recta y curva, o si se ignoran
-const int modoUsoDistancias = usarDistanciasManuales;
+const int modoUsoDistancias = usarDistancias;
 const int cantidadDeVueltasADar = 1; // en aprendizaje, se frena al terminar
-const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
+const int distanciaAnticipoCurva = 500; // medido en cuentas de encoder
 bool usarCarrilIzquierdo = false;
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
@@ -76,7 +87,7 @@ const int velocidadesCurvaCD[cantidadDeRectas] = {C+00, C+00, C+00, C+00};
 
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
-const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignore el sensorCurva
+const int TOLERANCIA_SENSOR_CURVA = 600; // más de 1024 hace que se ignore el sensorCurva
 const int DEBOUNCE_MODO_CURVA = 10; // ms
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
@@ -89,7 +100,7 @@ const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 40; // ms
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
-const int tiempoCicloReferencia = 1040;//390;
+const int tiempoCicloReferencia = 1200;//1040;//390;
 
 // parámetro batería
 // 8.23 V => 847
@@ -104,15 +115,50 @@ const int MAXIMO_VALOR_BATERIA = 859; // = 8.4V / 2 (divisor resistivo) * 1023.0
 
 // parámetros para promedio ponderado de sensoresLinea
 const int COEFICIENTE_SENSOR_IZQ     = 0;
-const int COEFICIENTE_SENSOR_CEN_IZQ = 2000;
-const int COEFICIENTE_SENSOR_CEN     = 3000;
-const int COEFICIENTE_SENSOR_CEN_DER = 4000;
-const int COEFICIENTE_SENSOR_DER     = 6000;
+const int COEFICIENTE_SENSOR_CEN_IZQ = 1000;
+const int COEFICIENTE_SENSOR_CEN     = 2000;
+const int COEFICIENTE_SENSOR_CEN_DER = 3000;
+const int COEFICIENTE_SENSOR_DER     = 4000;
 // centro de línea para sensoresLinea
-const int centroDeLinea = 3000;
+const int centroDeLinea = 2000;
+
+// Encoder circular buffer storage for speed estimation
+#define ENCODER_ARRAY_SIZE 61
+#define ENCODER_SUBSAMPLING 1
+
+// Both motor PIDs
+#define MOTOR_LIMIT_OUTPUT 200
+#define MOTOR_PID_SAMPLETIME 1
+
+// PID motor 1
+#define KP_MOTOR1 6.0
+#define KI_MOTOR1 0.0
+#define KD_MOTOR1 0.0005
+// PID motor 2
+#define KP_MOTOR2 6.0
+#define KI_MOTOR2 0.0
+#define KD_MOTOR2 0.0005
+
+#define DEBUG_ARRAY_SIZE 20
+DebugArray debug_data[DEBUG_ARRAY_SIZE];
 
 /** fin de parámetros configurables **/
 
+////////////////////////////////////////////////////////////////////////////////
+
+// PID motores
+const int motorLimit = MOTOR_LIMIT_OUTPUT;
+// PID motor 1
+double k_p1 = KP_MOTOR1, k_i1 = KI_MOTOR1, k_d1 = KD_MOTOR1;
+double setpoint1 = 0, input1 = 0, output1;
+unsigned int aux_input1 = 0;
+PID motor1Pid(&input1, &output1, &setpoint1, k_p1, k_i1, k_d1, DIRECT);
+
+// PID motor 2
+double k_p2 = KP_MOTOR2, k_i2 = KI_MOTOR2, k_d2 = KD_MOTOR2;
+double setpoint2 = 0, input2 = 0, output2;
+unsigned int aux_input2 = 0;
+PID motor2Pid(&input2, &output2, &setpoint2, k_p2, k_i2, k_d2, DIRECT);
 
 // definición de pines del micro.
 const int pwmMotorD = 11;
@@ -167,8 +213,17 @@ const int derecha = 1;
 const int izquierda = 0;
 
 // contadores de encoders
-volatile unsigned long contadorMotorIzquierdo = 0;
-volatile unsigned long contadorMotorDerecho = 0;
+volatile unsigned int contadorMotorIzquierdo = 0;
+volatile unsigned int contadorMotorDerecho = 0;
+unsigned int contadorMotorIzquierdoAnterior = 0;
+unsigned int contadorMotorDerechoAnterior = 0;
+
+unsigned int contadorMotorIzquierdoArray[ENCODER_ARRAY_SIZE] = {};
+unsigned int contadorMotorDerechoArray[ENCODER_ARRAY_SIZE] = {};
+byte pBegin = 0; // begin pointer of the circular buffer
+byte pEnd = 0;   // end pointer of the circular buffer
+unsigned int num_ciclo_programa = 0;
+unsigned int num_ciclo_subsampling = 0;
 
 // macro y string de debug por puerto serie
 char debug_string_buffer[20];
@@ -208,7 +263,7 @@ void setup() {
   pinMode(boton2, INPUT);
   pinMode(boton3, INPUT);
 
-  Serial.begin(115200);
+  Serial.begin(230400);
 
   // pone el prescaler del ADC Clock en 16
   // esto reduce el tiempo de cada conversión AD de ~112us a ~20us
@@ -217,7 +272,7 @@ void setup() {
   //clearBit(ADCSRA, ADPS0);
 
   // habilita interrupciones globales
-  // NOTA: Arduino deshabilita y habilita interrupciones cuando quiere leer 
+  // NOTA: Arduino deshabilita y habilita interrupciones cuando quiere leer
   // los valores de millis() y micros().
   sei();
 
@@ -252,16 +307,14 @@ void setup() {
     }
     inicializarCalibracionInicial = false;
   }
+  leerCalibracionDeEEPROM();
+
 
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
   digitalWrite(led3, LOW);
   digitalWrite(ledArduino, LOW);
   apagarMotores();
-
-  // Reseteo el valor del encoder
-  contadorMotorIzquierdo = 0;
-  contadorMotorDerecho = 0;
 
 }
 
@@ -330,23 +383,44 @@ void mostrarSensoresPorSerie() {
   debug("%.4d ", sensores[cenDer]);
   debug("%.4d ", sensores[der]);
   debug("%.4d ", sensores[curva]);
-  debug("%.4lu ", contadorMotorIzquierdo);
-  debug("%.4lu ", contadorMotorDerecho);
-  if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
+  debug("%.4d ", contadorMotorIzquierdo);
+  debug("%.4d ", contadorMotorDerecho);
+  debug("%.4d ", rangoVelocidad);
+  if (modoUsoDistancias == usarDistancias) {
     debug("%s ", "|");
     for (int i = 0; i < cantidadDeSegmentos; i++) {
-      debug("{%lu, ", distanciasRuedaIzquierda[i]);
-      debug("%lu} ", distanciasRuedaDerecha[i]);
+      debug("{%d, ", distanciasRuedaIzquierda[i]);
+      debug("%d} ", distanciasRuedaDerecha[i]);
     }
   }
   debug("%s", "\n");
+  // debug("%s", "\n--\n");
+  // debug("%d\n", num_ciclo_programa % DEBUG_ARRAY_SIZE);
+  // for (int i = 0; i < DEBUG_ARRAY_SIZE; i++)
+  // {
+  //   Serial.print(debug_data[i].k_p1);
+  //   Serial.print(" ");
+  //   Serial.print(debug_data[i].k_i1);
+  //   Serial.print(" ");
+  //   Serial.print(debug_data[i].k_d1);
+  //   Serial.print(" ");
+  //   Serial.print(debug_data[i].setpoint1);
+  //   Serial.print(" ");
+  //   Serial.print(debug_data[i].input1);
+  //   Serial.print(" ");
+  //   Serial.print(debug_data[i].output1);
+  //   Serial.print(" ");
+  //   debug("%.4d\n", debug_data[i].sensoresLinea);
+  // }
+  // debug("%s", "\n!!\n");
+
 }
 
 void apagarMotores() {
   digitalWrite(sentidoMotorI, adelante);
   digitalWrite(sentidoMotorD, adelante);
-  analogWrite(pwmMotorD, 0);
   analogWrite(pwmMotorI, 0);
+  analogWrite(pwmMotorD, 0);
 }
 
 inline void chequearBateria() {
@@ -377,9 +451,9 @@ inline void chequearBateriaBloqueante() {
     }
     esperarReboteBoton();
 
-    // luego de apretar el botón 
+    // luego de apretar el botón
     minimoValorBateria -= 10;
-    
+
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
     digitalWrite(led3, LOW);
@@ -398,7 +472,7 @@ void loop() {
   float errD = 0;
   float kP = 1;
   float kD = 0;
-  int rangoVelocidad;
+  // int rangoVelocidad;
   int velocidadFreno;
   int errorTotal;
   int reduccionVelocidad;
@@ -420,11 +494,40 @@ void loop() {
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   float coeficienteBateria;
-  int indiceSegmento = 0; // almacena el indice de segmento de la pista, arranca en 0
+  int indiceSegmento = 0; // almacena el indice de segmento de la pista
   int distanciaActual = 0;
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
-  
+
+
+
+  motor1Pid.SetMode(AUTOMATIC);
+  motor1Pid.SetSampleTime(MOTOR_PID_SAMPLETIME); // ms
+  motor1Pid.SetTunings(k_p1, k_i1, k_d1);
+  motor1Pid.SetOutputLimits( -motorLimit, motorLimit);
+
+
+  motor2Pid.SetMode(AUTOMATIC);
+  motor2Pid.SetSampleTime(MOTOR_PID_SAMPLETIME); // ms
+  motor2Pid.SetTunings(k_p2, k_i2, k_d2);
+  motor2Pid.SetOutputLimits( -motorLimit, motorLimit);
+
+  // Re inicializacion
+
+  contadorMotorIzquierdo = 0;
+  contadorMotorDerecho   = 0;
+  contadorMotorIzquierdoAnterior = 0;
+  contadorMotorDerechoAnterior   = 0;
+  pBegin = 0; // begin pointer of the circular buffer
+  pEnd = 0;   // end pointer of the circular buffer
+  num_ciclo_programa = 0;
+  num_ciclo_subsampling = 0;
+  for ( int i = 0; i < ENCODER_ARRAY_SIZE ; i++ )
+  {
+    contadorMotorIzquierdoArray[i] = 0;
+    contadorMotorDerechoArray[i] = 0;
+  }
+
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
   if (usarVelocidadPorTramo) {
@@ -440,22 +543,29 @@ void loop() {
   }
 
   // inicialización de todas las cosas
+  if (modoUsoDistancias == aprenderDistancias)
+  {
+    rangoVelocidadRecta      = rangoVelocidadAprender;
+    rangoVelocidadRectaLenta = rangoVelocidadAprender;
+    rangoVelocidadCurva      = rangoVelocidadAprender;
+    rangoVelocidadAfuera     = rangoVelocidadAprender;
+  }
   setup();
-
+  cant_curvas = 0;
   // hasta que se presione el botón, espera
   while (!apretado(boton1)) {
     chequearBateriaBloqueante();
-    
+
     obtenerSensoresCalibrados();
     mostrarSensoresPorSerie();
     // mostrarSensorLEDs(cen);
-    
+
     // carga opcional de información de encoders
     if (modoUsoDistancias == usarDistancias) {
       leerDistanciasDeEEPROM();
     }
 
-    // muestra estado de encoders
+    // muestra carril elegido (usado con encoders)
     if (usarCarrilIzquierdo) {
       digitalWrite(led1, HIGH);
       digitalWrite(led2, LOW);
@@ -463,7 +573,7 @@ void loop() {
       digitalWrite(led1, LOW);
       digitalWrite(led2, HIGH);
     }
-    
+
     // calibración usando el botón
     calibracionReseteada = false;
     while (apretado(boton3)) {
@@ -474,9 +584,9 @@ void loop() {
           maximosSensores[i] = 0;
         }
         calibracionReseteada = true;
-        // reuso la bandera de calibracionReseteada para que esto se ejecute 
+        // reuso la bandera de calibracionReseteada para que esto se ejecute
         // una sola vez por apretada de botón
-        usarCarrilIzquierdo = !usarCarrilIzquierdo;
+        // usarCarrilIzquierdo = !usarCarrilIzquierdo;
       }
 
       digitalWrite(led1, HIGH);
@@ -486,7 +596,10 @@ void loop() {
       digitalWrite(led3, LOW);
       delay(50);
     }
-    
+    if (calibracionReseteada) {
+      guardarCalibracionEnEEPROM();
+    }
+
   }
   esperarReboteBoton();
   digitalWrite(led1, LOW);
@@ -525,7 +638,7 @@ void loop() {
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
-    
+
     //chequearBateria();
     obtenerSensoresCalibrados();
 
@@ -573,7 +686,10 @@ void loop() {
       (long)sensores[cenDer] +
       (long)sensores[der]
     );
-    
+
+    // NM 20160925 remove noise from ADC, last 2 bits are BS
+    // sensoresLinea = ((sensoresLinea >> 2) << 2);
+
     // clampea valor extremo para indicarle al PID
     // que corrija con toda su fuerza
     if (estadoActualAdentro == false) {
@@ -588,20 +704,26 @@ void loop() {
     if (sensorCurvaActivo == 1 && sensorCurvaActivo != ultimoValorSensorCurva) {
       if (millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA) {
         // tengo seguridad de que pasó el rebote del sensor
+
+        // Prueba NM
+        // cant_curvas++;
+        // if (cant_curvas == 25)
+        //   rangoVelocidad = 30;
+
         modoCurva = !modoCurva;
 
         if (modoUsoDistancias == aprenderDistancias) {
-          distanciasRuedaIzquierda[indiceSegmento] = contadorMotorIzquierdo;
-          distanciasRuedaDerecha[indiceSegmento] = contadorMotorDerecho;
+          distanciasRuedaIzquierda[indiceSegmento] = contadorMotorIzquierdo - contadorMotorIzquierdoAnterior;
+          distanciasRuedaDerecha[indiceSegmento] = contadorMotorDerecho - contadorMotorDerechoAnterior;
         }
-        
+
         // indice usado para identificar el segmento
         indiceSegmento = (indiceSegmento + 1) % cantidadDeSegmentos;
-        
+
         // Reseteo el valor del encoder
-        contadorMotorIzquierdo = 0;
-        contadorMotorDerecho = 0;
-        
+        contadorMotorIzquierdoAnterior = contadorMotorIzquierdo;
+        contadorMotorDerechoAnterior = contadorMotorDerecho;
+
         if (modoUsoDistancias == aprenderDistancias) {
           if (indiceSegmento == 0) {
             cantidadDeVueltasRestantes--;
@@ -636,12 +758,6 @@ void loop() {
       if (usarVelocidadPorTramo) {
         rangoVelocidad = velocidadesCurvaPorTramo[contadorRecta];
       }
-      // velocidades manuales según segmento, para curva
-      // if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
-      //   if (indiceSegmento == 7) { // zigzag post-puente
-      //     rangoVelocidad = 80;
-      //   }
-      // }
       digitalWrite(led2, LOW);
       digitalWrite(led3, LOW);
     } else {
@@ -657,29 +773,18 @@ void loop() {
           digitalWrite(led3, LOW);
         }
       }
-      if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
+      if (modoUsoDistancias == usarDistancias) {
         // velocidades manuales según segmento, respetando distancia freno
         //if (indiceSegmento == 2) { // puente
           //rangoVelocidad = 160;
         //}
-        
+
         distanciaEsperada = (distanciasRuedaIzquierda[indiceSegmento] + distanciasRuedaDerecha[indiceSegmento]) / 2;
-        distanciaActual = (contadorMotorIzquierdo + contadorMotorDerecho) / 2;
+        distanciaActual = (contadorMotorIzquierdo - contadorMotorIzquierdoAnterior)/2 + (contadorMotorDerecho - contadorMotorDerechoAnterior) / 2;
         if (distanciaActual + distanciaAnticipoCurva > distanciaEsperada) {
-          if (millis() - ultimoTiempoRecta < tiempoDeFrenoPorDistancia) {
             rangoVelocidad = rangoVelocidadRectaLenta;
             kP = kPRectaLenta;
             kD = kDRectaLenta;
-            // freno fuerte en puente
-            // if (indiceSegmento == 6) { // puente
-            //   rangoVelocidad = 25;
-            // }
-            
-          } else {
-            rangoVelocidad = rangoVelocidadCurva;
-            kP = kPCurva;
-            kD = kDCurva;
-          }
           //velocidadFreno = velocidadFrenoRecta; // con freno curva cabecea mucho
           digitalWrite(led3, HIGH);
         } else {
@@ -695,19 +800,6 @@ void loop() {
       }
       digitalWrite(led2, HIGH);
     }
-
-    // velocidades manuales según segmento, fijo independientemente de si es
-    // curva o recta, o de si ya frenó o no
-    // if (modoUsoDistancias == usarDistancias || modoUsoDistancias == usarDistanciasManuales) {
-    //   if (indiceSegmento > 7) {
-    //     kP = kPCurva;
-    //     kD = kDCurva;
-    //     rangoVelocidad = rangoVelocidadCurva;
-    //     velocidadFreno = velocidadFrenoCurva;
-    //     digitalWrite(led2, LOW);
-    //     digitalWrite(led3, LOW);
-    //   }
-    // }
 
     if (estadoActualAdentro == false) {
       rangoVelocidad = rangoVelocidadAfuera;
@@ -754,51 +846,113 @@ void loop() {
     reduccionVelocidad = abs(reduccionVelocidad);
     velocidadMotorFrenado = abs(rangoVelocidad - reduccionVelocidad);
 
+
     if (direccionMovimientoLateral == haciaIzquierda) {
-      // si la reducción es mayor al rango de velocidad,
-      // uno de los motores va para atrás
-      if (reduccionVelocidad > rangoVelocidad) {
-        digitalWrite(sentidoMotorI, atras);
-        digitalWrite(sentidoMotorD, adelante);
-        analogWrite(pwmMotorI, 255 - velocidadMotorFrenado);
-        analogWrite(pwmMotorD, rangoVelocidad);
-      } else {
-        digitalWrite(sentidoMotorI, adelante);
-        digitalWrite(sentidoMotorD, adelante);
-        analogWrite(pwmMotorI, velocidadMotorFrenado);
-        analogWrite(pwmMotorD, rangoVelocidad);
-      }
-    } else if (direccionMovimientoLateral == haciaDerecha) {
-      // si la reducción es mayor al rango de velocidad,
-      // uno de los motores va para atrás
-      if (reduccionVelocidad > rangoVelocidad) {
-        digitalWrite(sentidoMotorI, adelante);
-        digitalWrite(sentidoMotorD, atras);
-        analogWrite(pwmMotorI, rangoVelocidad);
-        analogWrite(pwmMotorD, 255 - velocidadMotorFrenado);
-      } else {
-        digitalWrite(sentidoMotorI, adelante);
-        digitalWrite(sentidoMotorD, adelante);
-        analogWrite(pwmMotorI, rangoVelocidad);
-        analogWrite(pwmMotorD, velocidadMotorFrenado);
-      }
+      setpoint1 = velocidadMotorFrenado;
+      setpoint2 = rangoVelocidad;
+
+    } else {
+      setpoint1 = rangoVelocidad;
+      setpoint2 = velocidadMotorFrenado;
+
     }
+
+    num_ciclo_programa++;
+    if (  num_ciclo_programa % ENCODER_SUBSAMPLING == 0 )
+    {
+      pBegin = (ENCODER_ARRAY_SIZE + num_ciclo_subsampling ) % ENCODER_ARRAY_SIZE;
+      pEnd   = (ENCODER_ARRAY_SIZE + num_ciclo_subsampling + 1 ) % ENCODER_ARRAY_SIZE;
+      contadorMotorIzquierdoArray[pBegin] = contadorMotorIzquierdo;
+      contadorMotorDerechoArray[pBegin]   = contadorMotorDerecho;
+      aux_input1 = contadorMotorIzquierdoArray[pBegin] - contadorMotorIzquierdoArray[pEnd];
+      aux_input2 = contadorMotorDerechoArray[pBegin]   - contadorMotorDerechoArray[pEnd];
+      input1 = aux_input1;
+      input2 = aux_input2;
+      num_ciclo_subsampling++;
+    }
+    motor1Pid.Compute();
+    motor2Pid.Compute();
+
+    if (output1 < 0)
+    {
+      digitalWrite(sentidoMotorI, atras);
+      analogWrite(pwmMotorI, 255 + (int) output1 );
+      // analogWrite(pwmMotorI, 255 );
+    }
+    else
+    {
+      digitalWrite(sentidoMotorI, adelante);
+      analogWrite(pwmMotorI, (int) output1);
+    }
+
+    if (output2 < 0)
+    {
+      digitalWrite(sentidoMotorD, atras);
+      analogWrite(pwmMotorD, 255 + (int) output2 );
+      // analogWrite(pwmMotorD, 255 );
+    }
+    else
+    {
+      digitalWrite(sentidoMotorD, adelante);
+      analogWrite(pwmMotorD, (int) output2);
+    }
+
+      byte aux_idx = num_ciclo_programa % DEBUG_ARRAY_SIZE;
+      debug_data[aux_idx].k_p1 = motor1Pid.GetKp();
+      debug_data[aux_idx].k_i1 = motor1Pid.GetKi();
+      debug_data[aux_idx].k_d1 = motor1Pid.GetKd();
+      debug_data[aux_idx].setpoint1 = setpoint1;
+      debug_data[aux_idx].input1 = input1;
+      debug_data[aux_idx].output1 = output1;
+      debug_data[aux_idx].sensoresLinea = sensoresLinea;
+
+
 
     if (DEBUG) {
       // Permite ver por puerto serie cuánto tarda el ciclo de PID
       // antes de perder tiempo mandando cosas por puerto serie.
       // Usado para medir tiempoCicloReferencia.
-      //tiempoUs = micros() - ultimoTiempoUs;
+      tiempoUs = micros() - ultimoTiempoUs;
       debug("%.4i ", tiempoUs);
-      debug("% .4i ", (int)(errP * kP));
-      debug("% .4i ", (int)(errD * kD));
-      debug("%.4i ", abs(errorTotal));
-      debug("%.4i ", velocidadMotorFrenado);
-      debug("%s", "\n");
+      // debug("%4d ", contadorMotorIzquierdo);
+      // debug("%4d ", contadorMotorDerecho);
+      // debug("%4d ", num_ciclo_programa);
+
+      // debug("%u ", aux_input1);
+      // debug("%u ", aux_input2);
+      // debug("%3d\n", rangoVelocidad);
+
+      // debug("%u ", sensoresLinea);
+      // Serial.print(" ");
+      // Serial.print( setpoint1);
+      // Serial.print(" ");
+      // Serial.print( setpoint2);
+      // Serial.print(" ");
+      // Serial.print( output1);
+      // Serial.print(" ");
+      // Serial.print(output2);
+      Serial.print("\n");
+
+      // Serial.print(" ");
+      // Serial.print( motor1Pid.GetKp());
+      // Serial.print(" ");
+      // Serial.print( motor1Pid.GetKi());
+      // Serial.print(" ");
+      // Serial.print( motor1Pid.GetKd());
+
+
+      // debug("%d ", pBegin);
+      // debug("%d ", pEnd);
+      // debug("% .4i ", (int)(errP * kP));
+      // debug("% .4i ", (int)(errD * kD));
+      // debug("%.4i ", abs(errorTotal));
+      // debug("%.4i ", velocidadMotorFrenado);
+      // debug("%s", "\n");
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
 
+    // Time keeping loop
     while (tiempoUs < tiempoCicloReferencia) {
       tiempoUs = micros() - ultimoTiempoUs;
     }
@@ -847,13 +1001,13 @@ ISR(INT0_vect) {
   contadorMotorDerecho++;
 }
 
-void guardarLongEnEEPROM(long valor, int posicion) {
+void guardarIntEnEEPROM(int valor, int posicion) {
   uint8_t low = valor & 0xFF;
   uint8_t high = valor >> 8;
   EEPROM.write(posicion, low);
   EEPROM.write(posicion + 1, high);
 }
-long leerLongDeEEPROM(int posicion) {
+int leerIntDeEEPROM(int posicion) {
   uint8_t low;
   uint8_t high;
   low = EEPROM.read(posicion);
@@ -863,35 +1017,63 @@ long leerLongDeEEPROM(int posicion) {
 
 void guardarDistanciasEnEEPROM() {
   int posicion = 0;
-  
-  // las distancias del carril derecho se guardan después de todas las del 
+
+  // las distancias del carril derecho se guardan después de todas las del
   // carril izquierdo
   if (!usarCarrilIzquierdo) {
     // cada segmento usa 2 bytes por rueda
     posicion = cantidadDeSegmentos * 4;
   }
-  
+
   for (int i = 0; i < cantidadDeSegmentos; i++) {
-    guardarLongEnEEPROM(distanciasRuedaIzquierda[i], posicion);
+    guardarIntEnEEPROM(distanciasRuedaIzquierda[i], posicion);
     posicion = posicion + 2;
-    guardarLongEnEEPROM(distanciasRuedaDerecha[i], posicion);
+    guardarIntEnEEPROM(distanciasRuedaDerecha[i], posicion);
     posicion = posicion + 2;
   }
 }
 void leerDistanciasDeEEPROM() {
   int posicion = 0;
-  
-  // las distancias del carril derecho se guardan después de todas las del 
+
+  // las distancias del carril derecho se guardan después de todas las del
   // carril izquierdo
   if (!usarCarrilIzquierdo) {
     // cada segmento usa 2 bytes por rueda
     posicion = cantidadDeSegmentos * 4;
   }
-  
+
   for (int i = 0; i < cantidadDeSegmentos; i++) {
-    distanciasRuedaIzquierda[i] = leerLongDeEEPROM(posicion);
+    distanciasRuedaIzquierda[i] = leerIntDeEEPROM(posicion);
     posicion = posicion + 2;
-    distanciasRuedaDerecha[i] = leerLongDeEEPROM(posicion);
+    distanciasRuedaDerecha[i] = leerIntDeEEPROM(posicion);
     posicion = posicion + 2;
+  }
+}
+
+void guardarCalibracionEnEEPROM() {
+  // cada segmento usa 2 bytes por rueda, por la cantidad de segmentos,
+  // para los dos carriles
+  int posicion = cantidadDeSegmentos * 2 * 4;
+
+  // leo los sensores, y guardo los mínimos y los máximos
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    guardarIntEnEEPROM(minimosSensores[i], posicion);
+    posicion = posicion + 2;
+    guardarIntEnEEPROM(maximosSensores[i], posicion);
+    posicion = posicion + 2;
+  }
+}
+void leerCalibracionDeEEPROM() {
+  // cada segmento usa 2 bytes por rueda, por la cantidad de segmentos,
+  // para los dos carriles
+  int posicion = cantidadDeSegmentos * 2 * 4;
+
+  // leo los sensores, y guardo los mínimos y los máximos
+  for (int i = 0; i < cantidadDeSensores; i++) {
+    minimosSensores[i] = leerIntDeEEPROM(posicion);
+    posicion = posicion + 2;
+    maximosSensores[i] = leerIntDeEEPROM(posicion);
+    posicion = posicion + 2;
+    coeficientesSensores[i] = 1023.0 / (float)(maximosSensores[i] - minimosSensores[i]);
   }
 }
