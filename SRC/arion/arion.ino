@@ -8,11 +8,6 @@
 // const bool DEBUG = false;
 const bool DEBUG = true;
 
-// parámetros para estadoActualAdentro,
-// determina si se debe clampear los valores de sensoresLinea en el PID
-const int tolerancia = 50; // margen de ruido al medir negro
-const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
-
 // parámetros de velocidades máximas en recta y curva
 int rangoVelocidadRecta = 130; // velocidad real = rango - freno / 2
 int rangoVelocidadCurva = 110;
@@ -30,6 +25,10 @@ float kPCurva = 0.03;
 float kDCurva = 4.0;
 //const float kI = 1.0 / 2500.0;
 
+// parámetro para reducir a 0 rangoVelocidad cuando se entra en una curva,
+// para frenar de forma controlada
+const int tiempoFrenoInicioCurva = 200; //ms
+
 // parámetros encoders
 const int cantidadDeSegmentos = 1;
 // Arrays donde se guardan las distancias medidas por los encoders
@@ -41,15 +40,17 @@ const int ignorarDistancias = 2;
 // determina si se graban los valores en la EEPROM, si se usan para controlar
 // la velocidad de recta y curva, o si se ignoran
 const int modoUsoDistancias = ignorarDistancias;
-const int cantidadDeVueltasADar = 2; // en aprendizaje, se frena al terminar
+const int cantidadDeVueltasADar = 1; // en aprendizaje, se frena al terminar
 const int distanciaAnticipoCurva = 300; // medido en cuentas de encoder
 bool usarCarrilIzquierdo = false;
 
-// parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
-// y parámetros para pasar a una velocidad menor después de cierto tiempo en la recta, según el tramo
-// (nota: se puede agregar una recta más para contemplar la última recta, que si bien es la misma
-// en la que se arranca, puede tener hardcodeado la velocidad máxima, pues no es importante si
-// se cae inmediatamente después de terminar esa recta)
+// parámetros para usar velocidades distintas en cada recta y en cada curva, 
+// de cada carril (izq o der) y parámetros para pasar a una velocidad menor 
+// después de cierto tiempo en la recta, según el tramo 
+// (nota: se puede agregar una recta más para contemplar la última recta, que 
+// si bien es la misma en la que se arranca, puede tener hardcodeado la 
+// velocidad máxima, pues no es importante si se cae inmediatamente después de 
+// terminar esa recta)
 const bool usarTiemposPorRecta = false;
 const int cantidadDeRectas = 2; // asume que empieza en recta
 const int d1 = 130, d2 = 200, dp = 400, dt = 400; // dn = n maderas de largo
@@ -63,20 +64,13 @@ const int C = rangoVelocidadCurva;
 const int velocidadesCurvaCI[cantidadDeRectas] = {C+00, C+00};
 const int velocidadesCurvaCD[cantidadDeRectas] = {};
 
-const int tiempoFrenoInicioCurva = 200;
-
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
 const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignoren los sensores curva
-const int DEBOUNCE_MODO_CURVA = 0; // ms
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
-const int MAXIMO_SENSORES_LINEA = 4000;
-const int MINIMO_SENSORES_LINEA = 2000;
-
-// parámetros de frenarMotores
-const int VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA = 255; // 0 apagado, 255 full speed
-const int DELAY_FRENO_POR_CAMBIO_MODO_CURVA = 40; // ms
+const int MAXIMO_SENSORES_LINEA = 0;
+const int MINIMO_SENSORES_LINEA = 6000;
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
@@ -101,6 +95,14 @@ const int COEFICIENTE_SENSOR_DER     = 6000;
 // centro de línea para sensoresLinea
 const int centroDeLinea = 3000;
 
+// parámetros para estadoActualAdentro,
+// determina si se debe clampear los valores de sensoresLinea en el PID
+const int tolerancia = 50; // margen de ruido al medir negro
+const int toleranciaBorde = 500; // valor a partir del cual decimos que estamos casi afuera
+
+// parámetro para usar ADC asíncrono, mediante interrupciones
+const bool usarInterrupcionesADC = true;
+
 /** fin de parámetros configurables **/
 
 
@@ -109,7 +111,6 @@ const int pwmMotorD = 9; // OC1A
 const int pwmMotorI = 10; // OC1B
 const int sentidoMotorD = 5;
 const int sentidoMotorI = 6;
-// const int ledArduino = 13;
 const int led1 = 12;  // Led 1
 const int led2 = 13;  // Led 2
 const int led3 = 11;  // Led 3
@@ -121,19 +122,22 @@ const int sensor1 = A1; // cenIzq           sensor3(pcb)
 const int sensor2 = A2; // cen              sensor4(pcb)
 const int sensor3 = A3; // cenDer           sensor5(pcb)
 const int sensor4 = A4; // der              sensor6(pcb)
-const int batteryControl = A6; // not confirmed
-const int sensorCurvaIzq = A7;  //             sensor1(pcb)
-const int sensorCurvaDer = A5;  //             sensor7(pcb)
+const int batteryControl = A6; // 
+const int sensorCurvaIzq = A7; //           sensor1(pcb)
+const int sensorCurvaDer = A5; //           sensor7(pcb)
 const int habilitador = 4; // PD4
 
 // armado de array de sensores y arrays para calibración
 const int cantidadDeSensores = 7;
+int sensoresSinCalibrar[cantidadDeSensores];
 int sensores[cantidadDeSensores];
  // guarda los valores mínimos y máximos usados al calibrar
 int minimosSensores[cantidadDeSensores];
 int maximosSensores[cantidadDeSensores];
 float coeficientesSensores[cantidadDeSensores];
-byte canalesADC[cantidadDeSensores] = {sensor0, sensor1, sensor2, sensor3, sensor4, sensorCurvaIzq, sensorCurvaDer};
+byte canalesADC[cantidadDeSensores] = {
+  sensor0, sensor1, sensor2, sensor3, sensor4, sensorCurvaIzq, sensorCurvaDer
+};
 volatile byte indiceConversion = 0;
 
 // indices de array sensores
@@ -204,7 +208,6 @@ void setup() {
   //pinMode(sensorCurvaIzq, INPUT);
   //pinMode(sensorCurvaDer, INPUT);
 
-  // pinMode(ledArduino, OUTPUT);
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
   pinMode(led3, OUTPUT);
@@ -251,6 +254,7 @@ void setup() {
 
   if (inicializarCalibracionInicial) {
     for (int i = 0; i < cantidadDeSensores; i++) {
+      sensoresSinCalibrar[i] = 0;
       sensores[i] = 0;
       minimosSensores[i] = 0;
       maximosSensores[i] = 1023;
@@ -264,14 +268,16 @@ void setup() {
   led1Off();
   led2Off();
   led3Off();
-  // digitalWrite(ledArduino, LOW);
   apagarMotores();
 
-  // Reseteo el valor del encoder
+  // reseteo el valor del encoder
   contadorMotorIzquierdo = 0;
   contadorMotorDerecho = 0;
 
-  iniciarConversiones();
+  // pone en marcha las mediciones continuas de los AD
+  if (usarInterrupcionesADC) {
+    iniciarConversiones();
+  }
 
 }
 
@@ -284,23 +290,25 @@ void esperarReboteBoton() {
 }
 
 inline void obtenerSensores() {
-  return;
+  // este procedimiento no se usa cuando las conversiones AD se hacen
+  // mediante interrupciones
+  if (usarInterrupcionesADC) return;
   // carga en el array de sensores las lecturas AD de cada sensor
   // este proceso lleva 112us con el ADC con prescaler 16
-  sensores[izq]      = 1024 - analogRead(sensor0);
-  sensores[cenIzq]   = 1024 - analogRead(sensor1);
-  sensores[cen]      = 1024 - analogRead(sensor2);
-  sensores[cenDer]   = 1024 - analogRead(sensor3);
-  sensores[der]      = 1024 - analogRead(sensor4);
-  sensores[curvaIzq] = 1024 - analogRead(sensorCurvaIzq);
-  sensores[curvaDer] = 1024 - analogRead(sensorCurvaDer);
+  sensoresSinCalibrar[izq]      = 1024 - analogRead(sensor0);
+  sensoresSinCalibrar[cenIzq]   = 1024 - analogRead(sensor1);
+  sensoresSinCalibrar[cen]      = 1024 - analogRead(sensor2);
+  sensoresSinCalibrar[cenDer]   = 1024 - analogRead(sensor3);
+  sensoresSinCalibrar[der]      = 1024 - analogRead(sensor4);
+  sensoresSinCalibrar[curvaIzq] = 1024 - analogRead(sensorCurvaIzq);
+  sensoresSinCalibrar[curvaDer] = 1024 - analogRead(sensorCurvaDer);
 }
 
 inline void obtenerSensoresCalibrados() {
   int valor = 0;
   obtenerSensores();
   for (int i = 0; i < cantidadDeSensores; i++) {
-    valor = (sensores[i] - minimosSensores[i]);
+    valor = (sensoresSinCalibrar[i] - minimosSensores[i]);
     valor = valor * coeficientesSensores[i];
     if (valor > 1023) {
       valor = 1023;
@@ -315,18 +323,18 @@ void calibrarSensores() {
   // leo los sensores, y guardo los mínimos y los máximos
   obtenerSensores();
   for (int i = 0; i < cantidadDeSensores; i++) {
-    if (sensores[i] < minimosSensores[i]) {
-      minimosSensores[i] = sensores[i];
+    if (sensoresSinCalibrar[i] < minimosSensores[i]) {
+      minimosSensores[i] = sensoresSinCalibrar[i];
     }
-    if (sensores[i] > maximosSensores[i]) {
-      maximosSensores[i] = sensores[i];
+    if (sensoresSinCalibrar[i] > maximosSensores[i]) {
+      maximosSensores[i] = sensoresSinCalibrar[i];
     }
     coeficientesSensores[i] = 1023.0 / (float)(maximosSensores[i] - minimosSensores[i]);
   }
 }
 
 void mostrarSensorLEDs(int sensor) {
-  if ((sensor >= cantidadDeSensores) || (sensor < 0)) {
+  if (sensor >= cantidadDeSensores || sensor < 0) {
     return;
   }
   digitalWrite(led1, ((sensores[sensor] / 768) ? HIGH : LOW));
@@ -522,7 +530,6 @@ void loop() {
   int direccionMovimientoLateral;
   int sensoresLinea = 0;
   bool estadoActualAdentro = true;
-  bool ultimoEstadoActualAdentro = true;
   int sensorCurvaIzqActivo;
   int sensorCurvaDerActivo;
   bool calibracionReseteada = false;
@@ -541,9 +548,6 @@ void loop() {
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
   bool cambioModoCurvaCompletado = true;
   byte contadorDataSerie = 0;
-  //int calibrar = false;
-  //unsigned long int ultimoTiempoCalibracion = millis(); // ms
-  //const int tiempoCalibracion = 30; // ms
 
   // si fue seleccionado el modo usarVelocidadPorCurva,
   // precargo la data del carril seleccionado
@@ -566,15 +570,20 @@ void loop() {
   while (!apretado(boton1)) {
     leerVariablesDeSerie();
     
+    // deshabilito temporalmente las interrupciones para poder hacer lecturas
+    // manuales con AnalogRead de la batería
     noInterrupts();
     delayMicroseconds(120);
     chequearBateriaBloqueante();
     obtenerSensoresCalibrados();
     mostrarSensoresPorSerie();
     interrupts();
+    // le doy tiempo a las interrupciones ADC
+    // a refrescar el valor de los sensores
     delay(1);
 
-    // carga opcional de información de encoders
+    // carga opcional de información de encoders,
+    // que depende del carril actual
     if (modoUsoDistancias == usarDistancias) {
       leerDistanciasDeEEPROM();
     }
@@ -598,8 +607,6 @@ void loop() {
           maximosSensores[i] = 0;
         }
         calibracionReseteada = true;
-        //digitalWrite(habilitador, HIGH);
-        //delay(1);
         
         // reuso la bandera de calibracionReseteada para que esto se ejecute
         // una sola vez por apretada de botón
@@ -617,68 +624,11 @@ void loop() {
       guardarCalibracionEnEEPROM();
     }
 
-    // calibracion automática
-    //while (apretado(boton3)) {
-      //calibrar = true;
-      //led1Off();
-      //led2Off();
-      //led3Off();
-    //}
-    
-    //if (calibrar) {
-      //calibrar = false;
-      //delay(400);
-
-      //// reseteo la calibración
-      //for (int i = 0; i < cantidadDeSensores; i++) {
-        //minimosSensores[i] = 1023;
-        //maximosSensores[i] = 0;
-      //}
-      ////digitalWrite(habilitador, HIGH);
-      ////delay(1);
-      
-      //// reuso la bandera de calibracionReseteada para que esto se ejecute
-      //// una sola vez por apretada de botón
-      //usarCarrilIzquierdo = !usarCarrilIzquierdo;
-
-      //led1On();
-      
-      //// gira y calibra
-      //ultimoTiempoCalibracion = millis();
-      //digitalWrite(sentidoMotorI, atras);
-      //digitalWrite(sentidoMotorD, adelante);
-      //analogWrite(pwmMotorI, 255 - 70);
-      //analogWrite(pwmMotorD, 70);
-      //while (millis() - ultimoTiempoCalibracion < 30) {
-        //calibrarSensores();
-      //}
-      //apagarMotores();
-      //delay(400);
-      
-      //ultimoTiempoCalibracion = millis();
-      //digitalWrite(sentidoMotorI, adelante);
-      //digitalWrite(sentidoMotorD, atras);
-      //analogWrite(pwmMotorI, 70);
-      //analogWrite(pwmMotorD, 255 - 70);
-      //while (millis() - ultimoTiempoCalibracion < 60) {
-        //calibrarSensores();
-      //}
-      //apagarMotores();
-      //delay(400);
-      
-      //guardarCalibracionEnEEPROM();
-      //led1Off();
-      //led2Off();
-      //led3Off();
-      //delay(50);
-      
-    //}
   }
   esperarReboteBoton();
   led1Off();
   led2Off();
   led3Off();
-  // digitalWrite(ledArduino, LOW);
 
   // hasta que se suelte el botón, espera
   while (apretado(boton1));
@@ -716,26 +666,15 @@ void loop() {
     }
 
     // si me fui, entro en modo "corrección máxima"
-    if ((sensores[cenIzq] < tolerancia) &&
-        (sensores[cen]    < tolerancia) &&
-        (sensores[cenDer] < tolerancia)) {
-      if ( ((sensores[izq]  < tolerancia) && (sensores[der] < toleranciaBorde) ) ||
-           ((sensores[izq]  < toleranciaBorde) && (sensores[der] < tolerancia) ) ) {
-        estadoActualAdentro = false;
-        //led3On();
-        if (estadoActualAdentro != ultimoEstadoActualAdentro) {
-          //frenarMotores();
-        }
-      } else {
-        //led3Off();
-        estadoActualAdentro = true;
-      }
-
-    } else {
       estadoActualAdentro = true;
-      //led3Off();
+    if (sensores[cenIzq] < tolerancia &&
+        sensores[cen]    < tolerancia &&
+        sensores[cenDer] < tolerancia) {
+      if ( (sensores[izq] < tolerancia && sensores[der] < toleranciaBorde) ||
+           (sensores[izq] < toleranciaBorde && sensores[der] < tolerancia) ) {
+        estadoActualAdentro = false;
+      }
     }
-    ultimoEstadoActualAdentro = estadoActualAdentro;
 
     // 50 microsegundos
     // modo pid
@@ -787,6 +726,7 @@ void loop() {
       contadorMotorIzquierdo = 0;
       contadorMotorDerecho = 0;
 
+      // en el modo aprender, se apaga cuando termina la cantidad de vueltas
       if (modoUsoDistancias == aprenderDistancias) {
         if (indiceSegmento == 0) {
           cantidadDeVueltasRestantes--;
@@ -800,7 +740,6 @@ void loop() {
 
       // si paso a modo curva, freno porque venia rápido
       if (modoCurva) {
-        // frenarMotores(); // Para las pruebas de encoders lo comento
         ultimoTiempoCurva = millis();
       } else {
         ultimoTiempoRecta = millis();
@@ -893,7 +832,6 @@ void loop() {
     reduccionVelocidad = abs(reduccionVelocidad);
     velocidadMotorFrenado = abs(rangoVelocidad - reduccionVelocidad);
 
-
     if (direccionMovimientoLateral == haciaIzquierda) {
       // si la reducción es mayor al rango de velocidad,
       // uno de los motores va para atrás
@@ -943,13 +881,11 @@ void loop() {
         contadorDataSerie = 0;
       }
     
-      // debug("%.4i ", velocidadMotorFrenado);
-      // debug("%.4lu ", contadorMotorIzquierdo);
-      // debug("%.4lu\n", contadorMotorDerecho);
     }
     // mide el tiempo entre ciclo y ciclo, necesario para calcular errD y errI
     tiempoUs = micros() - ultimoTiempoUs;
 
+    // espera a que se cumpla el tiempoCicloReferencia
     if (tiempoUs < tiempoCicloReferencia) {
       delayMicroseconds(tiempoCicloReferencia - tiempoUs);
       tiempoUs = micros() - ultimoTiempoUs;
@@ -968,26 +904,6 @@ void loop() {
   while (apretado(boton1));
   esperarReboteBoton();
 
-}
-
-inline void frenarMotores() {
-  led1On();
-
-  // pone los motores para atrás a la velocidad del parámetro y espera
-  digitalWrite(sentidoMotorI, atras);
-  digitalWrite(sentidoMotorD, atras);
-  analogWrite(pwmMotorI, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
-  analogWrite(pwmMotorD, 255 - VELOCIDAD_FRENO_POR_CAMBIO_MODO_CURVA);
-
-  delay(DELAY_FRENO_POR_CAMBIO_MODO_CURVA); // ms
-
-  // pone los motores para adelante, frenados
-  digitalWrite(sentidoMotorI, adelante);
-  digitalWrite(sentidoMotorD, adelante);
-  analogWrite(pwmMotorI, 0);
-  analogWrite(pwmMotorD, 0);
-
-  led1Off();
 }
 
 //// handler para PCINT22
@@ -1049,7 +965,7 @@ void leerDistanciasDeEEPROM() {
 }
 
 void guardarCalibracionEnEEPROM() {
-  // cada segmento usa 2 bytes por rueda, por la cantiadd de segmentos,
+  // cada segmento usa 2 bytes por rueda, por la cantidad de segmentos,
   // para los dos carriles
   int posicion = cantidadDeSegmentos * 2 * 4;
   
@@ -1062,7 +978,7 @@ void guardarCalibracionEnEEPROM() {
   }
 }
 void leerCalibracionDeEEPROM() {
-  // cada segmento usa 2 bytes por rueda, por la cantiadd de segmentos,
+  // cada segmento usa 2 bytes por rueda, por la cantidad de segmentos,
   // para los dos carriles
   int posicion = cantidadDeSegmentos * 2 * 4;
 
@@ -1076,8 +992,7 @@ void leerCalibracionDeEEPROM() {
   }
 }
 
-
-inline void iniciarConversiones() {
+void iniciarConversiones() {
   byte pin;
   for (byte i = 0; i < cantidadDeSensores; i++) {
     pin = canalesADC[i];
@@ -1106,9 +1021,8 @@ inline void iniciarConversiones() {
   ADCSRA |= (1 << ADIE) | (1 << ADSC);
 }
 
-
 ISR(ADC_vect) {
-  sensores[indiceConversion] = 1024 - ADC;
+  sensoresSinCalibrar[indiceConversion] = 1024 - ADC;
   if (++indiceConversion == cantidadDeSensores) {
     indiceConversion = 0;
   }
@@ -1117,4 +1031,3 @@ ISR(ADC_vect) {
   ADMUX = (0 << REFS1) | (1 << REFS0) | (0 << ADLAR) | (pin & 0x07);
   ADCSRA |= _BV(ADSC); // Start next conversion  
 }
-
