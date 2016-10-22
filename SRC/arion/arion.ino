@@ -27,7 +27,7 @@ float kDCurva = 4.0;
 
 // parámetro para reducir a 0 rangoVelocidad cuando se entra en una curva,
 // para frenar de forma controlada
-const int tiempoFrenoInicioCurva = 200; //ms
+const unsigned int tiempoFrenoInicioCurva = 300; //ms
 
 // parámetros encoders
 const int cantidadDeSegmentos = 1;
@@ -69,8 +69,8 @@ const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curv
 const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignoren los sensores curva
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
-const int MAXIMO_SENSORES_LINEA = 2000;
-const int MINIMO_SENSORES_LINEA = 4000;
+const int MINIMO_SENSORES_LINEA = 2000;
+const int MAXIMO_SENSORES_LINEA = 4000;
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
@@ -186,6 +186,9 @@ char debug_string_buffer[30];
 #define led2Off() digitalWrite(led2, HIGH)
 #define led3Off() digitalWrite(led3, HIGH)
 
+#define detenerInterrupcionesADC() clearBit(ADCSRA, ADIE)
+#define iniciarInterrupcionesADC() ADCSRA |= (1 << ADIE) | (1 << ADSC)
+
 #define SERIAL_BPS 115200
 
 void setup() {
@@ -270,14 +273,19 @@ void setup() {
   led3Off();
   apagarMotores();
 
-  // Sube la frecuencia de PWM, cambiando el prescaler del Timer1.
-  // La frecuencia debería pasar de 512Hz a 64Hz.
-  // El default es 0b011, y pasaría a 0b100.
-  // A mayor frecuencia, menor torque.
-  //setBit(TCCR1B, CS12);
-  //clearBit(TCCR1B, CS11);
-  //clearBit(TCCR1B, CS10);
-
+  // Cambia la frecuencia de PWM, cambiando el prescaler del Timer1 
+  // El default es 0b011 (64) en Phase Correct, ~490Hz
+  // 0b011 prescaler 64 --> 490 Hz / 976 Hz
+  //clearBit(TCCR1B, CS12);
+  //setBit(TCCR1B, CS11);
+  //setBit(TCCR1B, CS10);
+  
+  // Fast PWM 8-bit (TOP=0x00FF): WGM1[3:0] = 0b0101
+  //clearBit(TCCR1B, WGM13);
+  //setBit(TCCR1B, WGM12);
+  //clearBit(TCCR1A, WGM11);
+  //setBit(TCCR1A, WGM10);
+  
   // reseteo el valor del encoder
   contadorMotorIzquierdo = 0;
   contadorMotorDerecho = 0;
@@ -580,14 +588,16 @@ void loop() {
     
     // deshabilito temporalmente las interrupciones para poder hacer lecturas
     // manuales con AnalogRead de la batería
-    noInterrupts();
-    delayMicroseconds(120);
+    detenerInterrupcionesADC();
+    delayMicroseconds(120); // espero a que termine la última conversión
+
     chequearBateriaBloqueante();
     obtenerSensoresCalibrados();
     mostrarSensoresPorSerie();
-    interrupts();
+
     // le doy tiempo a las interrupciones ADC
     // a refrescar el valor de los sensores
+    iniciarInterrupcionesADC();
     delay(1);
 
     // carga opcional de información de encoders,
@@ -877,6 +887,7 @@ void loop() {
       //tiempoUs = micros() - ultimoTiempoUs;
       //debug("%.4i ", sensoresLinea);
       if (contadorDataSerie == 0) debug("%.4i ", sensoresLinea);
+      //if (contadorDataSerie == 1) debug("%.4i ", tiempoUs);
       Serial.print("\n");
       contadorDataSerie++;
       if (contadorDataSerie == 1) {
