@@ -9,8 +9,8 @@
 const bool DEBUG = true;
 
 // parámetros de velocidades máximas en recta y curva
-int rangoVelocidadRecta = 130; // velocidad real = rango - freno / 2
-int rangoVelocidadCurva = 110;
+int rangoVelocidadRecta = 120; // velocidad real = rango - freno / 2
+int rangoVelocidadCurva = 90;
 int rangoVelocidadAfuera = 0;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
@@ -69,8 +69,8 @@ const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curv
 const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignoren los sensores curva
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
-const int MAXIMO_SENSORES_LINEA = 0;
-const int MINIMO_SENSORES_LINEA = 6000;
+const int MAXIMO_SENSORES_LINEA = 2000;
+const int MINIMO_SENSORES_LINEA = 4000;
 
 // parámetro medido por tiempoUs para compensar tiempo transcurrido
 // entre ciclo y ciclo del PID
@@ -269,6 +269,14 @@ void setup() {
   led2Off();
   led3Off();
   apagarMotores();
+
+  // Sube la frecuencia de PWM, cambiando el prescaler del Timer1.
+  // La frecuencia debería pasar de 512Hz a 64Hz.
+  // El default es 0b011, y pasaría a 0b100.
+  // A mayor frecuencia, menor torque.
+  //setBit(TCCR1B, CS12);
+  //clearBit(TCCR1B, CS11);
+  //clearBit(TCCR1B, CS10);
 
   // reseteo el valor del encoder
   contadorMotorIzquierdo = 0;
@@ -867,17 +875,11 @@ void loop() {
       // antes de perder tiempo mandando cosas por puerto serie.
       // Usado para medir tiempoCicloReferencia.
       //tiempoUs = micros() - ultimoTiempoUs;
-      if (contadorDataSerie == 0) {
-        debug("%.4i ", tiempoUs);
-      } else if (contadorDataSerie == 1) {
-        debug("%.4i ", rangoVelocidad);
-      } else if (contadorDataSerie == 2) {
-        debug("%.4i ", sensoresLinea);
-      } else if (contadorDataSerie == 3) {
-        debug("%.4i\n", velocidadMotorFrenado);
-      }
+      //debug("%.4i ", sensoresLinea);
+      if (contadorDataSerie == 0) debug("%.4i ", sensoresLinea);
+      Serial.print("\n");
       contadorDataSerie++;
-      if (contadorDataSerie == 4) {
+      if (contadorDataSerie == 1) {
         contadorDataSerie = 0;
       }
     
