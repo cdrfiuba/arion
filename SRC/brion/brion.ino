@@ -4,11 +4,21 @@
 #include <PID_v1.h>
 
 /** inicio de parámetros configurables **/
-
+/* Pista larga modificada 19.33 segundos
+comentario: curva con oscilaciones
+speedSetpoint = 55;
+rangoVelocidadRecta = 105;
+kPRecta = 0.02;
+kDRecta = 1.0;
+kPRectaLenta = kPRecta ;
+kDRectaLenta = kDRecta;
+kPCurva = 0.1;
+kDCurva = 1.1;
+*/
 // parámetro para mostrar información por puerto serie en el ciclo principal
 const bool DEBUG = false;
 // const bool DEBUG = true;
-int speedSetpoint = 45; // cuentas por (ENCODER_ARRAY_SIZE * ENCODER_SUBSAMPLING) ciclos
+int speedSetpoint = 55; // cuentas por (ENCODER_ARRAY_SIZE * ENCODER_SUBSAMPLING) ciclos
 int cant_curvas = 0;
 
 
@@ -34,7 +44,7 @@ int rangoVelocidad;
 // 839: 210, 100, 155, 45
 // 859: 200, 95, 150, 45
 int rangoVelocidadAprender = 40;
-int rangoVelocidadRecta = 85;//85;//95;// 75 (terminó) 128; // velocidad real = rango - freno / 2
+int rangoVelocidadRecta = 105;//85;//95;// 75 (terminó) 128; // velocidad real = rango - freno / 2
 int rangoVelocidadRectaLenta = speedSetpoint;//95;
 int rangoVelocidadCurva = speedSetpoint;//130;
 int rangoVelocidadAfuera = speedSetpoint; //
@@ -45,16 +55,17 @@ const int velocidadFrenoCurva = 0; //60;
 const int velocidadFrenoAfuera = 0;
 
 // parámetros PID
+
 const float kPRecta = 0.02;//0.02;//0.03;// 0.04;     //1.0 / 9.0; //1/12
-const float kDRecta = 0.95;//1 estable pero con probable sobre corrección;//0.125;//075;//;3;        //3.0; //7
+const float kDRecta = 1.0;//1 estable pero con probable sobre corrección;//0.125;//075;//;3;        //3.0; //7
 const float kPRectaLenta = kPRecta ;// 1.0 / 7.0;
 const float kDRectaLenta = kDRecta;//3.0; // 200
-const float kPCurva = 0.03;//1.0 / 9.0;
-const float kDCurva = kDRecta;//3.0; //30
+const float kPCurva = 0.1;//1.0 / 9.0;
+const float kDCurva = 1.1;//3.0; //30
 //const float kI = 1.0 / 2500.0;
 
 // parámetros encoders
-const int cantidadDeSegmentos = 1;
+const int cantidadDeSegmentos = 21;
 // Arrays donde se guardan las distancias medidas por los encoders
 unsigned int distanciasRuedaIzquierda[cantidadDeSegmentos] = {};
 unsigned int distanciasRuedaDerecha[cantidadDeSegmentos] = {};
@@ -65,7 +76,7 @@ const int ignorarDistancias = 2;
 // la velocidad de recta y curva, o si se ignoran
 const int modoUsoDistancias = usarDistancias;
 const int cantidadDeVueltasADar = 1; // en aprendizaje, se frena al terminar
-const int distanciaAnticipoCurva = 500; // medido en cuentas de encoder
+const int distanciaAnticipoCurva = 100; // medido en cuentas de encoder
 bool usarCarrilIzquierdo = false;
 
 // parámetros para usar velocidades distintas en cada recta y en cada curva, de cada carril (izq o der)
@@ -127,15 +138,15 @@ const int centroDeLinea = 2000;
 #define ENCODER_SUBSAMPLING 1
 
 // Both motor PIDs
-#define MOTOR_LIMIT_OUTPUT 200
+#define MOTOR_LIMIT_OUTPUT 255
 #define MOTOR_PID_SAMPLETIME 1
 
 // PID motor 1
-#define KP_MOTOR1 6.0
+#define KP_MOTOR1 4.0
 #define KI_MOTOR1 0.0
 #define KD_MOTOR1 0.0005
 // PID motor 2
-#define KP_MOTOR2 6.0
+#define KP_MOTOR2 4.0
 #define KI_MOTOR2 0.0
 #define KD_MOTOR2 0.0005
 
@@ -217,6 +228,9 @@ volatile unsigned int contadorMotorIzquierdo = 0;
 volatile unsigned int contadorMotorDerecho = 0;
 unsigned int contadorMotorIzquierdoAnterior = 0;
 unsigned int contadorMotorDerechoAnterior = 0;
+unsigned int contadorMotorIzquierdoCicloAnterior = 0;
+unsigned int contadorMotorDerechoCicloAnterior = 0;
+
 
 unsigned int contadorMotorIzquierdoArray[ENCODER_ARRAY_SIZE] = {};
 unsigned int contadorMotorDerechoArray[ENCODER_ARRAY_SIZE] = {};
@@ -499,6 +513,25 @@ void loop() {
   int distanciaEsperada = 0;
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
 
+  // Holt Linear Exponential Smoothing
+  // General parameters for both wheels
+  float alpha = 0.035;
+  float beta = 0.1;
+  float kForecast = 1;
+  float alphaComplement = 1 - alpha;
+  float betaComplement = 1 - beta;
+  // Left Wheel
+  float LtIzq = 0;
+  float LtIzqAnterior = 0;
+  float TrendIzq = 0;
+  float TrendIzqAnterior = 0;
+  float YtIzq, YIzqPredictivo;
+  // Right Wheel
+  float LtDer = 0;
+  float LtDerAnterior = 0;
+  float TrendDer = 0;
+  float TrendDerAnterior = 0;
+  float YtDer, YDerPredictivo;
 
 
   motor1Pid.SetMode(AUTOMATIC);
@@ -512,21 +545,6 @@ void loop() {
   motor2Pid.SetTunings(k_p2, k_i2, k_d2);
   motor2Pid.SetOutputLimits( -motorLimit, motorLimit);
 
-  // Re inicializacion
-
-  contadorMotorIzquierdo = 0;
-  contadorMotorDerecho   = 0;
-  contadorMotorIzquierdoAnterior = 0;
-  contadorMotorDerechoAnterior   = 0;
-  pBegin = 0; // begin pointer of the circular buffer
-  pEnd = 0;   // end pointer of the circular buffer
-  num_ciclo_programa = 0;
-  num_ciclo_subsampling = 0;
-  for ( int i = 0; i < ENCODER_ARRAY_SIZE ; i++ )
-  {
-    contadorMotorIzquierdoArray[i] = 0;
-    contadorMotorDerechoArray[i] = 0;
-  }
 
   // si fue seleccionado el modo usarVelocidadPorTramo,
   // precargo la data del carril seleccionado
@@ -635,6 +653,21 @@ void loop() {
   // inicialización tiempos
   ultimoTiempoRecta = millis();
   ultimoTiempoUs = micros();
+
+  // Re inicializacion
+  contadorMotorIzquierdo = 0;
+  contadorMotorDerecho   = 0;
+  contadorMotorIzquierdoAnterior = 0;
+  contadorMotorDerechoAnterior   = 0;
+  pBegin = 0; // begin pointer of the circular buffer
+  pEnd = 0;   // end pointer of the circular buffer
+  num_ciclo_programa = 0;
+  num_ciclo_subsampling = 0;
+  for ( int i = 0; i < ENCODER_ARRAY_SIZE ; i++ )
+  {
+    contadorMotorIzquierdoArray[i] = 0;
+    contadorMotorDerechoArray[i] = 0;
+  }
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
@@ -857,7 +890,9 @@ void loop() {
 
     }
 
+
     num_ciclo_programa++;
+    /*
     if (  num_ciclo_programa % ENCODER_SUBSAMPLING == 0 )
     {
       pBegin = (ENCODER_ARRAY_SIZE + num_ciclo_subsampling ) % ENCODER_ARRAY_SIZE;
@@ -870,8 +905,43 @@ void loop() {
       input2 = aux_input2;
       num_ciclo_subsampling++;
     }
+    */
+
+
+    // Cantidad de pasos entre ciclos
+    YtIzq = contadorMotorIzquierdo - contadorMotorIzquierdoCicloAnterior;
+    YtDer = contadorMotorDerecho   - contadorMotorDerechoCicloAnterior;
+    contadorMotorIzquierdoCicloAnterior = contadorMotorIzquierdo;
+    contadorMotorDerechoCicloAnterior = contadorMotorDerecho;
+
+    // Level Updating Equation
+    LtIzq = alpha * YtIzq + alphaComplement * (LtIzqAnterior + TrendIzqAnterior);
+    LtDer = alpha * YtDer + alphaComplement * (LtDerAnterior + TrendDerAnterior);
+    // Trend Updating Equation
+    TrendIzq = beta * (LtIzq - LtIzqAnterior) + betaComplement * TrendIzqAnterior;
+    TrendDer = beta * (LtDer - LtDerAnterior) + betaComplement * TrendDerAnterior;
+    // Forecasting Equation
+    YIzqPredictivo = (LtIzq + kForecast*TrendIzq)*61; // 61 is just a scale factor
+    YDerPredictivo = (LtDer + kForecast*TrendDer)*61; // 61 is just a scale factor
+    // Previous values storage
+    TrendIzqAnterior = TrendIzq;
+    LtIzqAnterior = LtIzq;
+    TrendDerAnterior = TrendDer;
+    LtDerAnterior = LtDer;
+    // Clamping
+    if (YIzqPredictivo < 0 )
+      YIzqPredictivo = 0;
+    if (YDerPredictivo < 0 )
+      YDerPredictivo = 0;
+
+    input1 = YIzqPredictivo;
+    input2 = YDerPredictivo;
+
     motor1Pid.Compute();
     motor2Pid.Compute();
+
+    // output1 = 50;
+    // output2 = 50;
 
     if (output1 < 0)
     {
@@ -897,6 +967,8 @@ void loop() {
       analogWrite(pwmMotorD, (int) output2);
     }
 
+
+    /* Debugging last values of PID for bizarre behaviour
       byte aux_idx = num_ciclo_programa % DEBUG_ARRAY_SIZE;
       debug_data[aux_idx].k_p1 = motor1Pid.GetKp();
       debug_data[aux_idx].k_i1 = motor1Pid.GetKi();
@@ -905,6 +977,7 @@ void loop() {
       debug_data[aux_idx].input1 = input1;
       debug_data[aux_idx].output1 = output1;
       debug_data[aux_idx].sensoresLinea = sensoresLinea;
+    */
 
 
 
@@ -917,8 +990,14 @@ void loop() {
       // debug("%4d ", contadorMotorIzquierdo);
       // debug("%4d ", contadorMotorDerecho);
       // debug("%4d ", num_ciclo_programa);
+      debug("%.2i ", (int) YtIzq);
+      debug("%.2i ", (int) YtDer);
 
-      // debug("%u ", aux_input1);
+      debug("%u ", aux_input1);
+      debug("%u ", aux_input2);
+      Serial.print( YIzqPredictivo);
+      Serial.print(" ");
+      Serial.print( YDerPredictivo);
       // debug("%u ", aux_input2);
       // debug("%3d\n", rangoVelocidad);
 
