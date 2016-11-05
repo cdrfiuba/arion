@@ -6,28 +6,32 @@
 
 // parámetro para mostrar información por puerto serie en el ciclo principal
 // const bool DEBUG = false;
-const bool DEBUG = true;
+const bool DEBUG = false;
 
 // parámetros de velocidades máximas en recta y curva
 int rangoVelocidadRecta = 120; // velocidad real = rango - freno / 2
-int rangoVelocidadCurva = 90;
-int rangoVelocidadAfuera = 0;
+int rangoVelocidadRectaLenta = 90; // velocidad real = rango - freno / 2
+int rangoVelocidadCurva = 80;
+int rangoVelocidadAfuera = 30;
 
 // velocidad permitida en reversa al aplicar reduccionVelocidad en PID
 int velocidadFrenoRecta = 70;
-int velocidadFrenoCurva = 90;
+int velocidadFrenoRectaLenta = 70;
+int velocidadFrenoCurva = 0;
 int velocidadFrenoAfuera = 0;
 
 // parámetros PID
 float kPRecta = 0.03;
 float kDRecta = 5.0;
-float kPCurva = 0.03;
-float kDCurva = 4.0;
+float kPRectaLenta = 0.03;
+float kDRectaLenta = 5.0;
+float kPCurva = 0.12;
+float kDCurva = 3.0;
 //const float kI = 1.0 / 2500.0;
 
 // parámetro para reducir a 0 rangoVelocidad cuando se entra en una curva,
 // para frenar de forma controlada
-const unsigned int tiempoFrenoInicioCurva = 300; //ms
+const int tiempoFrenoInicioCurva = 300; //ms
 
 // parámetros encoders
 const int cantidadDeSegmentos = 1;
@@ -52,11 +56,11 @@ bool usarCarrilIzquierdo = false;
 // velocidad máxima, pues no es importante si se cae inmediatamente después de 
 // terminar esa recta)
 const bool usarTiemposPorRecta = false;
-const int cantidadDeRectas = 2; // asume que empieza en recta
+const int cantidadDeRectas = 10; // asume que empieza en recta
 const int d1 = 130, d2 = 200, dp = 400, dt = 400; // dn = n maderas de largo
 const unsigned int tiempoAMaxVelocidadRecta[cantidadDeRectas] = {
-  d1, d1
-  //d2, d1, d1, d1, 0/*salida cruz*/, d1, d2, dt/*tunel*/, d2, d1, dp/*puente*/, d1, d1, 
+  //d1, d1
+  d2, d1, d1, d2, dt, d2, d1, dp, d1, d1
   //65000
 };
 const bool usarVelocidadPorCurva = false;
@@ -67,6 +71,8 @@ const int velocidadesCurvaCD[cantidadDeRectas] = {};
 // parámetros para modo curva
 const bool MODO_CURVA_INICIAL = false; // para debuggear si arranca en modo curva o no
 const int TOLERANCIA_SENSOR_CURVA = 450; // más de 1024 hace que se ignoren los sensores curva
+const int DEBOUNCE_MODO_CURVA = 200; // ms, entre cambios de modo curva
+const int tiempoDebounceModoCurva = 100; // ms, entre sensor curva izq y sensor curva der
 
 // parámetros de sensoresLinea cuando estadoActualAdentro == false
 const int MINIMO_SENSORES_LINEA = 2000;
@@ -154,8 +160,8 @@ const int curvaDer = 6;
 bool inicializarCalibracionInicial = true;
 
 // dirección motor
-const int atras = HIGH;
-const int adelante = LOW;
+const int atras = LOW;
+const int adelante = HIGH;
 
 // dirección de direccionMovimientoLateral
 const int haciaDerecha = 1;
@@ -384,8 +390,8 @@ void mostrarSensoresPorSerie() {
 void apagarMotores() {
   digitalWrite(sentidoMotorI, adelante);
   digitalWrite(sentidoMotorD, adelante);
-  analogWrite(pwmMotorI, 0);
-  analogWrite(pwmMotorD, 0);
+  analogWrite(pwmMotorI, 255 - 0);
+  analogWrite(pwmMotorD, 255 - 0);
 }
 
 inline void chequearBateria() {
@@ -556,6 +562,7 @@ void loop() {
   unsigned long int ultimoTiempoUs = 0; // guarda el valor de micros()
   unsigned long int ultimoTiempoRecta = 0; // guarda el valor de millis()
   unsigned long int ultimoTiempoCurva = 0; // guarda el valor de millis()
+  unsigned long int ultimoTiempoModoCurva = 0; // guarda el valor de millis()
   int contadorRecta = 0;
   int velocidadesCurvaPorTramo[cantidadDeRectas];
   int indiceSegmento = 0; // almacena el indice de segmento de la pista
@@ -564,6 +571,8 @@ void loop() {
   int cantidadDeVueltasRestantes = cantidadDeVueltasADar;
   bool cambioModoCurvaCompletado = true;
   byte contadorDataSerie = 0;
+  unsigned long int ultimoTiempoSensorCurvaIzq = 0; // guarda el valor de millis()
+  unsigned long int ultimoTiempoSensorCurvaDer = 0; // guarda el valor de millis()
 
   // si fue seleccionado el modo usarVelocidadPorCurva,
   // precargo la data del carril seleccionado
@@ -661,8 +670,8 @@ void loop() {
 
   // arranque gradual
   for (int i = 0; i < rangoVelocidad / 10; i++) {
-    analogWrite(pwmMotorD, i * 10);
-    analogWrite(pwmMotorI, i * 10);
+    analogWrite(pwmMotorD, 255 - i * 10);
+    analogWrite(pwmMotorI, 255 - i * 10);
     delay(10);
   }
 
@@ -670,6 +679,8 @@ void loop() {
   ultimoTiempoRecta = millis();
   ultimoTiempoCurva = millis();
   ultimoTiempoUs = micros();
+  ultimoTiempoSensorCurvaIzq = millis();
+  ultimoTiempoSensorCurvaDer = millis();
 
   // ejecuta el ciclo principal hasta que se presione el botón
   while (!apretado(boton1)) {
@@ -723,11 +734,27 @@ void loop() {
 
     sensorCurvaIzqActivo = ((sensores[curvaIzq] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
     sensorCurvaDerActivo = ((sensores[curvaDer] > TOLERANCIA_SENSOR_CURVA) ? 1 : 0);
-    
+
     if (sensorCurvaIzqActivo == 0 && sensorCurvaDerActivo == 0) {
-      cambioModoCurvaCompletado = true;
+      cambioModoCurvaCompletado = false;
     }
-    if (sensorCurvaIzqActivo == 1 && sensorCurvaDerActivo == 1 && cambioModoCurvaCompletado) {
+    
+    // cambio a modo curva si pasaron entre 0 y N milisegundos entre haber 
+    // visto 1 en un sensor y el otro
+    if (sensorCurvaIzqActivo == 1) {
+      ultimoTiempoSensorCurvaIzq = millis();
+      if (millis() - ultimoTiempoSensorCurvaDer < tiempoDebounceModoCurva) {
+        cambioModoCurvaCompletado = true;
+      }
+    }
+    if (sensorCurvaDerActivo == 1) {
+      ultimoTiempoSensorCurvaDer = millis();
+      if (millis() - ultimoTiempoSensorCurvaIzq < tiempoDebounceModoCurva) {
+        cambioModoCurvaCompletado = true;
+      }
+    }
+
+    if (cambioModoCurvaCompletado && millis() - ultimoTiempoModoCurva > DEBOUNCE_MODO_CURVA) {
       cambioModoCurvaCompletado = false;
       // tengo seguridad de que pasó el rebote del sensor
       modoCurva = !modoCurva;
@@ -756,6 +783,8 @@ void loop() {
         }
       }
 
+      ultimoTiempoModoCurva = millis();
+      
       // si paso a modo curva, freno porque venia rápido
       if (modoCurva) {
         ultimoTiempoCurva = millis();
@@ -789,10 +818,10 @@ void loop() {
       velocidadFreno = velocidadFrenoRecta;
       if (usarTiemposPorRecta) {
         if (millis() - ultimoTiempoRecta > tiempoAMaxVelocidadRecta[contadorRecta]) {
-          kP = kPCurva;
-          kD = kDCurva;
-          rangoVelocidad = rangoVelocidadCurva;
-          velocidadFreno = velocidadFrenoCurva;
+          kP = kPRectaLenta;
+          kD = kDRectaLenta;
+          rangoVelocidad = rangoVelocidadRectaLenta;
+          velocidadFreno = velocidadFrenoRectaLenta;
           
           // velocidades manuales según segmento, después de frenar
           // if (contadorRecta == 3) {
@@ -856,13 +885,13 @@ void loop() {
       if (reduccionVelocidad > rangoVelocidad) {
         digitalWrite(sentidoMotorI, atras);
         digitalWrite(sentidoMotorD, adelante);
-        analogWrite(pwmMotorI, 255 - velocidadMotorFrenado);
-        analogWrite(pwmMotorD, rangoVelocidad);
+        analogWrite(pwmMotorI, 255 - (255 - velocidadMotorFrenado));
+        analogWrite(pwmMotorD, 255 - rangoVelocidad);
       } else {
         digitalWrite(sentidoMotorI, adelante);
         digitalWrite(sentidoMotorD, adelante);
-        analogWrite(pwmMotorI, velocidadMotorFrenado);
-        analogWrite(pwmMotorD, rangoVelocidad);
+        analogWrite(pwmMotorI, 255 - velocidadMotorFrenado);
+        analogWrite(pwmMotorD, 255 - rangoVelocidad);
       }
     } else if (direccionMovimientoLateral == haciaDerecha) {
       // si la reducción es mayor al rango de velocidad,
@@ -870,13 +899,13 @@ void loop() {
       if (reduccionVelocidad > rangoVelocidad) {
         digitalWrite(sentidoMotorI, adelante);
         digitalWrite(sentidoMotorD, atras);
-        analogWrite(pwmMotorI, rangoVelocidad);
-        analogWrite(pwmMotorD, 255 - velocidadMotorFrenado);
+        analogWrite(pwmMotorI, 255 - rangoVelocidad);
+        analogWrite(pwmMotorD, 255 - (255 - velocidadMotorFrenado));
       } else {
         digitalWrite(sentidoMotorI, adelante);
         digitalWrite(sentidoMotorD, adelante);
-        analogWrite(pwmMotorI, rangoVelocidad);
-        analogWrite(pwmMotorD, velocidadMotorFrenado);
+        analogWrite(pwmMotorI, 255 - rangoVelocidad);
+        analogWrite(pwmMotorD, 255 - velocidadMotorFrenado);
       }
     }
 
