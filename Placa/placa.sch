@@ -32,8 +32,6 @@ LIBS:tcrt1000
 LIBS:reg_204-5
 LIBS:DVR8833
 LIBS:sn74lvc2g86
-LIBS:logo
-LIBS:placa-cache
 EELAYER 25 0
 EELAYER END
 $Descr A4 11693 8268
@@ -449,17 +447,6 @@ F 1 "CONN_01X02" V 9250 4250 50  0000 C CNN
 F 2 "Pin_Headers:Pin_Header_Straight_1x02" H 9150 4250 50  0001 C CNN
 F 3 "" H 9150 4250 50  0000 C CNN
 	1    9150 4250
-	1    0    0    -1  
-$EndComp
-$Comp
-L CONN_01X04 P1
-U 1 1 572D968E
-P 8250 5350
-F 0 "P1" H 8250 5600 50  0000 C CNN
-F 1 "CONN_01X04" V 8350 5350 50  0000 C CNN
-F 2 "Pin_Headers:Pin_Header_Straight_1x04" H 8250 5350 50  0001 C CNN
-F 3 "" H 8250 5350 50  0000 C CNN
-	1    8250 5350
 	1    0    0    -1  
 $EndComp
 $Comp
@@ -1332,4 +1319,19 @@ $EndComp
 Wire Wire Line
 	1550 7000 1800 7000
 Connection ~ 1800 7000
+$Comp
+L CONN_01X05 P1
+U 1 1 5854844A
+P 8250 5400
+F 0 "P1" H 8250 5700 50  0000 C CNN
+F 1 "CONN_01X05" V 8350 5400 50  0000 C CNN
+F 2 "Pin_Headers:Pin_Header_Straight_1x05" H 8250 5400 50  0001 C CNN
+F 3 "" H 8250 5400 50  0000 C CNN
+	1    8250 5400
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	8050 5600 7800 5600
+Text Label 7800 5600 0    60   ~ 0
+Reset
 $EndSCHEMATC
