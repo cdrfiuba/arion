@@ -195,7 +195,7 @@ char debug_string_buffer[30];
 #define detenerInterrupcionesADC() clearBit(ADCSRA, ADIE)
 #define iniciarInterrupcionesADC() ADCSRA |= (1 << ADIE) | (1 << ADSC)
 
-#define SERIAL_BPS 115200
+#define SERIAL_BPS 2000000
 
 void setup() {
   // como los motores se manejan con AnalogWrite,
@@ -216,6 +216,14 @@ void setup() {
   //pinMode(batteryControl, INPUT);
   //pinMode(sensorCurvaIzq, INPUT);
   //pinMode(sensorCurvaDer, INPUT);
+
+  // saco los input buffer de los pines que leo por ADC
+  setBit(DIDR0, ADC5D);
+  setBit(DIDR0, ADC4D);
+  setBit(DIDR0, ADC3D);
+  setBit(DIDR0, ADC2D);
+  setBit(DIDR0, ADC1D);
+  setBit(DIDR0, ADC0D);
 
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
@@ -535,6 +543,25 @@ void leerVariablesDeSerie() {
       delay(5000);
     }
   }
+}
+
+void pruebaVelocidadSerie() {
+  unsigned long timeStart = micros();
+  unsigned long currentBytesWritten = 0;
+  unsigned long totalBytesWritten = 0;
+  
+  for (int i = 0; i < 8400; i++) {
+    currentBytesWritten = Serial.print("__________");
+    totalBytesWritten = totalBytesWritten + currentBytesWritten;
+  }
+  
+  unsigned long timeEnd = (micros() - timeStart) / 1000.0;
+  
+  debug("bytes: %4lu", totalBytesWritten);
+  debug("%4lu ms \n", timeEnd);
+  
+  delay(2000);
+	
 }
 
 void loop() {
